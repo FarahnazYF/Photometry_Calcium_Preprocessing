@@ -207,6 +207,9 @@ photometry_plot_qc('motion', data, cfg);      % Figure 6
 % Standard z = (dF/F - mean) / SD
 % Robust z   = (dF/F - median) / (1.4826 x MAD)   (less affected by large transients)
 % One mean, SD, median and MAD over all valid samples of the recording.
+% This puts every animal on the same scale, but it also removes real
+% differences in overall signal size between animals (see README.md,
+% "A note on z-scores").
 [data.z, data.z_robust, data.z_info] = photometry_zscore(data.dF_F);
 
 %% 13. 1-minute rolling median (a second version of the results)

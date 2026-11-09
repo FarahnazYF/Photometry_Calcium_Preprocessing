@@ -257,8 +257,9 @@ first lights ON is day 0 (ZT 23).
 
 **4. One value per LED pulse.** The LED monitor channels show when each LED is
 on. During every pulse, the median of the PMT signal is taken (one value per
-pulse, i.e. 50 values per second per channel). Time zero is the start of the
-analysis window.
+pulse, i.e. 50 values per second per channel), as in the combined EEG and
+fibre-photometry recordings of Patel et al. (2020). Time zero is the start of
+the analysis window.
 
 **5. Phases, alignment, trimming.** A pause in the pulses longer than 30 min
 separates two phases; each phase is corrected separately. The 470 values are
@@ -279,13 +280,21 @@ so recordings without it are left unchanged. Turn it off with
 **7. Low-pass filter.** Removes fast noise (e.g. the heartbeat, ~11 Hz).
 Default: a 2nd-order Butterworth filter, 3 Hz, applied forwards and backwards
 (`filtfilt`), so the signal is not shifted in time (half of the power is kept
-at about 2.4 Hz). Option: a 1-s centred rolling mean instead.
+at about 2.4 Hz). Option: a 1-s centred rolling mean instead. Simpson et al.
+(2024) recommend such zero-phase filtering and note that cut-offs of 2-10 Hz
+are typical for indicators such as GCaMP6f.
 
 **8. Photobleaching correction.** In every phase, a double exponential
 `a·exp(b·t) + c·exp(d·t)` is fitted to each channel, and the channel is divided
 by it (both channels then hover around 1). If the fit fails in a phase, a
 straight line is used there instead (a warning says so). A phase whose 405
 signal has collapsed (below 20% of the recording's median) is excluded.
+Simpson et al. (2024) describe a double exponential as a good compromise
+(flexible enough for bleaching, not so flexible that it fits the physiological
+signal) and recommend correcting bleaching before, and separately from, the
+motion correction, as done here. Dividing (rather than subtracting) assumes
+that the bleaching comes mainly from the indicator rather than from
+autofluorescence.
 
 **9. Automatic artifact suggestions.** After a preliminary motion correction,
 unusually large and short deflections (at most 40 s) are marked. These are
@@ -299,7 +308,8 @@ change both channels; 405 does not depend on calcium. One straight line
 **IRLS** (iteratively reweighted least squares with Tukey's bisquare weights,
 MATLAB's `robustfit(405, 470, 'bisquare', 1.4)`). Samples far from the line,
 such as calcium transients, get weight 0, so they do not pull the fit (an
-ordinary least-squares fit would partly fit the calcium signal itself). Then
+ordinary least-squares fit would partly fit the calcium signal itself; see
+Keevers & Jean-Richard-dit-Bressel, 2025). Then
 
 ```text
 dF/F = (470 - fitted 405) / fitted 405
@@ -310,7 +320,9 @@ as a fraction (multiply by 100 for percent).
 **12. z-scores.** Over all valid samples of the recording:
 `z = (dF/F - mean) / SD` and the robust version
 `z_robust = (dF/F - median) / (1.4826 × MAD)`, which is barely affected by large
-transients or leftover artifacts.
+transients or leftover artifacts. The robust version is the same as the
+"modified z-score" of GuPPy, `0.6745 × (dF/F - median) / MAD`
+(1/1.4826 = 0.6745). See [A note on z-scores](#a-note-on-z-scores).
 
 **13. Rolling median.** A centred 1-minute rolling median of dF/F is
 subtracted from dF/F (within each phase and gap-free stretch; missing samples
@@ -421,6 +433,18 @@ Both are saved; choose by your question.
   interested in fast events (transients, their size and rate) and want a flat
   baseline. Remember that it also removes genuine slow changes.
 
+### A note on z-scores
+
+The z-scores are calculated per recording (one mean and SD, or one median and
+MAD, for the whole recording). This puts recordings from different animals on
+the same scale, so differences in indicator expression, light power or
+background fluorescence no longer matter. The price is that real differences
+in overall signal size between animals or recordings are removed too (Simpson
+et al., 2024; GuPPy documentation). Z-scores are therefore good for comparing
+the shape and relative size of changes within an animal (e.g. sleep stages,
+light vs dark, before vs after sleep deprivation), but on their own they
+cannot show that one animal or group has a larger signal than another.
+
 ## Using your own recording system
 
 | Your situation | What to change (Section 1) |
@@ -504,6 +528,24 @@ also commercially, as long as the copyright notice is kept.
   robust regression, and dF/F calculations. *Neurophotonics*.
   <https://pmc.ncbi.nlm.nih.gov/articles/PMC11957252/> (comparison of IRLS
   and ordinary least squares for fitting the isosbestic signal).
+- Simpson, E. H., Akam, T., Patriarchi, T., Blanco-Pozo, M., Burgeno, L. M.,
+  Mohebi, A., Cragg, S. J., & Walton, M. E. (2024). Lights, fiber, action! A
+  primer on in vivo fiber photometry. *Neuron*, 112(5), 718-739.
+  <https://doi.org/10.1016/j.neuron.2023.11.016>; section "Data
+  pre-processing and analysis":
+  <https://pmc.ncbi.nlm.nih.gov/articles/PMC10939905/#S17> (filtering,
+  bleaching correction, movement correction and normalization, including
+  z-scoring).
+- Sherathiya, V. N., Schaid, M. D., Seiler, J. L., Lopez, G. C., & Lerner,
+  T. N. (2021). GuPPy, a Python toolbox for the analysis of fiber photometry
+  data. *Scientific Reports*, 11, 24212. Its documentation on z-scores
+  (standard, baseline and modified/robust z-score, and their limits):
+  <https://guppy.readthedocs.io/explanation/zscore.html>
+- Patel, A. A., McAlinden, N., Mathieson, K., & Sakata, S. (2020).
+  Simultaneous electrophysiology and fiber photometry in freely behaving mice.
+  *Frontiers in Neuroscience*, 14, 148.
+  <https://doi.org/10.3389/fnins.2020.00148> (EEG and fibre photometry
+  recorded together; one median value per illumination epoch).
 - MATLAB `robustfit` (IRLS with bisquare weights):
   <https://www.mathworks.com/help/stats/robustfit.html>
 - EDF and EDF+ file specifications (recording start time):

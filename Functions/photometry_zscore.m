@@ -8,11 +8,15 @@ function [z, z_robust, info] = photometry_zscore(signal)
 % MAD is the median absolute deviation from the median. 1.4826 x MAD equals
 % the SD for normally distributed data, but large calcium transients and
 % leftover artifacts barely change it, so the robust z-score is less
-% affected by them.
+% affected by them. It is the same as GuPPy's "modified z-score",
+% 0.6745 x (signal - median) / MAD, because 1/1.4826 = 0.6745.
 %
 % One mean, SD, median and MAD are calculated over all valid samples of
 % the recording (all phases together). Missing samples (NaN) stay NaN. If
 % the SD or MAD is zero, the scores are NaN (and info says so).
+% Because each recording is scaled by its own SD (or MAD), z-scores remove
+% differences in overall signal size between animals or recordings: compare
+% changes within an animal, not absolute signal size between animals.
 %
 % Output
 %   z, z_robust  column vectors, the same length as signal
