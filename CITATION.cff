@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "Photometry Calcium Preprocessing: a MATLAB pipeline for long fibre-photometry recordings"
+abstract: >-
+  A beginner-friendly MATLAB pipeline that preprocesses long fibre-photometry
+  recordings (405-nm isosbestic and 470-nm calcium channels): LED-pulse
+  extraction, removal of a periodic sawtooth from the 405 channel, low-pass
+  filtering, double-exponential photobleaching correction, automatic artifact
+  suggestions with manual removal, IRLS motion correction, dF/F, and standard
+  and robust z-scores, saved without and with a 1-minute rolling median.
+type: software
+authors:
+  - given-names: Farahnaz
+    family-names: Yazdanpanah Faragheh
+    affiliation: University of Surrey
+version: 1.0.0
+date-released: 2026-11-09
+license: MIT
+repository-code: "https://github.com/FarahnazYF/Photometry_Calcium_Preprocessing"
+keywords:
+  - fiber photometry
+  - fibre photometry
+  - calcium imaging
+  - GCaMP
+  - isosbestic
+  - dF/F
+  - MATLAB

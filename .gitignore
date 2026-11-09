@@ -1,0 +1,26 @@
+# ---- Data and results: never upload recordings or results ---------------
+# Raw recordings and results can be very large and may be unpublished data.
+*.mat
+*.edf
+*.raf
+*.csv
+*.png
+!docs/**/*.png
+calcium_preprocessing_results/
+
+# ---- MATLAB autosave and temporary files ------------------------------------
+*.asv
+*.m~
+*.autosave
+*.mex*
+*.p
+slprj/
+codegen/
+helpsearch*/
+.MATLABDriveTag
+resources/project/
+
+# ---- Operating-system files --------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini

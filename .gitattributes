@@ -1,0 +1,13 @@
+# Store text files with LF line endings in the repository; Git converts them
+# for your operating system when you check them out.
+* text=auto
+*.m    text diff=matlab
+*.md   text
+*.cff  text
+
+# Binary MATLAB files: never merge or change line endings.
+*.mat  binary
+*.fig  binary
+*.mlx  binary
+*.mlapp binary
+*.png  binary
