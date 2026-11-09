@@ -4,7 +4,11 @@ function summary = photometry_phase_summary(data)
 %   summary = photometry_phase_summary(data)
 %
 % Columns
-%   phase, start_zt_hours, end_zt_hours, duration_min
+%   phase
+%   start_day, start_zt_hours, end_day, end_zt_hours   start and end as
+%                           Zeitgeber time (0-24, restarting at every
+%                           lights ON) and day (see photometry_zt)
+%   duration_min
 %   samples                 samples in the phase
 %   trimmed_samples         set to missing by the edge trims (Step 5)
 %   removed_by_hand         removed in the manual review (Step 10)
@@ -18,22 +22,22 @@ function summary = photometry_phase_summary(data)
 %   sd_dF_F_rolling_median_pct            dF/F after the rolling median (%)
 
 n = size(data.phase_windows, 1);
-zt0 = data.crop_info.reference_zt;
+h0 = data.crop_info.start_hours_from_lights_on;   % time zero in hours from the first lights ON
 trimmed = logical(data.trim_mask(:));
 by_hand = logical(data.manual_mask(:)) & ~trimmed;
 valid = isfinite(data.dF_F(:));
 other = ~valid & ~trimmed & ~by_hand;
 
-[start_zt, end_zt, duration_min, samples, trimmed_n, by_hand_n, other_n, valid_n, ...
-    saw_applied, saw_total, suggestions, mean_pct, sd_pct, sd_median_pct] = deal(nan(n, 1));
+[start_zt, start_day, end_zt, end_day, duration_min, samples, trimmed_n, by_hand_n, other_n, ...
+    valid_n, saw_applied, saw_total, suggestions, mean_pct, sd_pct, sd_median_pct] = deal(nan(n, 1));
 windows = table();
 if isfield(data, 'sawtooth_info') && isfield(data.sawtooth_info, 'windows')
     windows = data.sawtooth_info.windows;
 end
 for p = 1:n
     idx = data.phase_windows(p, 1):data.phase_windows(p, 2);
-    start_zt(p) = zt0 + data.time_s(idx(1))/3600;
-    end_zt(p) = zt0 + data.time_s(idx(end))/3600;
+    [start_zt(p), start_day(p)] = photometry_zt(h0 + data.time_s(idx(1))/3600);
+    [end_zt(p), end_day(p)] = photometry_zt(h0 + data.time_s(idx(end))/3600);
     duration_min(p) = (data.time_s(idx(end)) - data.time_s(idx(1)))/60;
     samples(p) = numel(idx);
     trimmed_n(p) = nnz(trimmed(idx));
@@ -54,10 +58,11 @@ for p = 1:n
     if ~isempty(y), sd_median_pct(p) = std(y); end
 end
 
-summary = table((1:n)', start_zt, end_zt, duration_min, samples, trimmed_n, by_hand_n, ...
-    other_n, valid_n, 100*valid_n./samples, data.bleaching_info.method, saw_applied, saw_total, ...
-    suggestions, mean_pct, sd_pct, sd_median_pct, 'VariableNames', { ...
-    'phase', 'start_zt_hours', 'end_zt_hours', 'duration_min', 'samples', 'trimmed_samples', ...
+summary = table((1:n)', start_day, start_zt, end_day, end_zt, duration_min, samples, trimmed_n, ...
+    by_hand_n, other_n, valid_n, 100*valid_n./samples, data.bleaching_info.method, saw_applied, ...
+    saw_total, suggestions, mean_pct, sd_pct, sd_median_pct, 'VariableNames', { ...
+    'phase', 'start_day', 'start_zt_hours', 'end_day', 'end_zt_hours', 'duration_min', ...
+    'samples', 'trimmed_samples', ...
     'removed_by_hand', 'other_missing', 'valid_samples', 'valid_percent', 'bleaching_method', ...
     'sawtooth_windows_removed', 'sawtooth_windows', 'artifact_suggestions', ...
     'mean_dF_F_pct', 'sd_dF_F_pct', 'sd_dF_F_rolling_median_pct'});

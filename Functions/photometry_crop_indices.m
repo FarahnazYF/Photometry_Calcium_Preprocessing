@@ -5,7 +5,8 @@ function [first, last, info] = photometry_crop_indices(recording_start, lights_o
 %                                                 duration_hours, hours_before_lights_on)
 %
 % The analysis window starts hours_before_lights_on hours before lights ON
-% (default 1 hour, i.e. ZT-1) and lasts duration_hours hours.
+% (default 1 hour, i.e. ZT-1, which is ZT 23 of the previous day) and lasts
+% duration_hours hours.
 %
 % Inputs
 %   recording_start         clock time of the first raw sample, 'HH:mm' or
@@ -20,7 +21,8 @@ function [first, last, info] = photometry_crop_indices(recording_start, lights_o
 %                duration_hours is Inf; the caller then uses the end)
 %   info         the same numbers in words: reference_clock (clock time of
 %                the first kept sample), offset_sec (seconds skipped at the
-%                start), reference_zt (ZT of the first kept sample), ...
+%                start), start_hours_from_lights_on (-1 = the first kept
+%                sample is 1 hour before the first lights ON, i.e. ZT 23), ...
 %
 % Example: recording start 06:56:16, lights ON 08:00, 1 hour before lights
 % ON -> the analysis starts at 07:00:00 (ZT-1); 224 s are skipped.
@@ -44,7 +46,7 @@ info.recording_start   = char(recording_start);
 info.lights_on         = char(lights_on);
 info.reference_clock   = format_clock(reference_sec);
 info.offset_sec        = offset_sec;
-info.reference_zt      = -hours_before_lights_on;
+info.start_hours_from_lights_on = -hours_before_lights_on;   % time 0 of the analysis, in hours from the first lights ON
 info.first_raw_sample  = first;
 info.last_raw_sample   = last;
 info.duration_hours    = duration_hours;

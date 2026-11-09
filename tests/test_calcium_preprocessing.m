@@ -109,8 +109,8 @@ function testCropIndices(testCase)
 [first, last, info] = photometry_crop_indices('06:55', '08:00', 1000, 49);
 verifyEqual(testCase, first, 300001);                       % 5 minutes skipped
 verifyEqual(testCase, last - first + 1, 49*3600*1000);
-verifyEqual(testCase, info.reference_clock, '07:00:00');    % ZT-1
-verifyEqual(testCase, info.reference_zt, -1);
+verifyEqual(testCase, info.reference_clock, '07:00:00');    % ZT-1 (= ZT 23)
+verifyEqual(testCase, info.start_hours_from_lights_on, -1);
 [first, ~, info] = photometry_crop_indices('06:56:16', '08:00', 1000, 49);
 verifyEqual(testCase, info.offset_sec, 224);
 verifyEqual(testCase, first, 224001);
@@ -118,10 +118,43 @@ verifyEqual(testCase, first, 224001);
 verifyEqual(testCase, info.offset_sec, 300);
 [~, ~, info] = photometry_crop_indices('05:00', '08:00', 1000, 49, 2);  % 2 hours before lights ON
 verifyEqual(testCase, info.reference_clock, '06:00:00');
-verifyEqual(testCase, info.reference_zt, -2);
+verifyEqual(testCase, info.start_hours_from_lights_on, -2);
 [~, last] = photometry_crop_indices('06:55', '08:00', 1000, Inf);
 verifyEqual(testCase, last, Inf);
 verifyError(testCase, @() photometry_crop_indices('26:00', '08:00', 1000, 49), 'photometry:Clock');
+end
+
+function testZeitgeberTimeRestartsAtEveryLightsOn(testCase)
+% ZT runs from 0 to 24 and restarts: 24 h after lights ON is ZT 0 of day 2,
+% 36 h after it is ZT 12 (never ZT 24 or ZT 36).
+[zt, day, label] = photometry_zt([-1; -0.5; 0; 11.5; 23.99; 24; 36; 47.5; 48]);
+verifyEqual(testCase, zt, [23; 23.5; 0; 11.5; 23.99; 0; 12; 23.5; 0], 'AbsTol', 1e-12);
+verifyEqual(testCase, day, [0; 0; 1; 1; 1; 2; 2; 2; 3]);
+verifyEqual(testCase, label{7}, 'ZT 12.00 (day 2)');
+[~, ~, label] = photometry_zt(47.9999);                 % last sample of a 49-h recording
+verifyEqual(testCase, label, 'ZT 23.99 (day 2)');        % never shown as 24.00
+[zt, day] = photometry_zt(24 - 1e-12);                    % rounding just below a lights ON
+verifyEqual(testCase, [zt day], [0 2]);
+end
+
+function testFigureAxisShowsZeitgeberTime(testCase)
+% The time axis of the figures is labelled 0-24 (restarting at every lights
+% ON), also after zooming.
+f = figure('Visible', 'off');
+testCase.addTeardown(@() close(f));
+ax = axes(f);
+plot(ax, [-1 48], [0 0]);
+photometry_zt_axis(ax, [-1 48]);
+drawnow;
+labels = str2double(ax.XTickLabel);
+verifyTrue(testCase, all(labels >= 0 & labels < 24));
+verifyEqual(testCase, labels(:)', [0 6 12 18 0 6 12 18 0]);
+marks = findall(ax, 'Type', 'ConstantLine');             % the dashed lines (hidden from the legend)
+verifyEqual(testCase, sort(string({marks.Label})), ...
+    sort(["ZT 0 (day 1)", "ZT 12", "ZT 0 (day 2)", "ZT 12", "ZT 0 (day 3)"]));
+xlim(ax, [30 36]);                                       % zoom in on day 2, ZT 6-12
+drawnow;
+verifyEqual(testCase, str2double(ax.XTickLabel)', 6:12);
 end
 
 function testRecordingStartFromMatFile(testCase)
@@ -201,8 +234,15 @@ verifyEqual(testCase, r.no_rolling_median.dF_F, data.dF_F);
 verifyEqual(testCase, r.no_rolling_median.z_robust, data.z_robust);
 verifyEqual(testCase, r.rolling_median.dF_F, data.dF_F_rolling_median);
 verifyEqual(testCase, r.rolling_median.window_sec, 60);
-verifyEqual(testCase, r.zt_hours, -1 + data.time_s/3600, 'AbsTol', 1e-12);
+% Zeitgeber time restarts at 0 at every lights ON; the recording starts at
+% ZT-1, i.e. ZT 23 before the first lights ON (day 0).
+verifyEqual(testCase, r.zt_hours, mod(-1 + data.time_s/3600, 24), 'AbsTol', 1e-9);
+verifyTrue(testCase, all(r.zt_hours >= 0 & r.zt_hours < 24));
+verifyEqual(testCase, r.zt_hours(1), 23, 'AbsTol', 1e-12);
+verifyTrue(testCase, all(r.day == 0));    % this 55-min recording ends before the first lights ON
 verifyEqual(testCase, height(r.phase_summary), 2);
+verifyEqual(testCase, r.phase_summary.start_zt_hours(1), 23, 'AbsTol', 1e-12);
+verifyTrue(testCase, all(r.artifact_suggestions.peak_zt_hours >= 0 & r.artifact_suggestions.peak_zt_hours < 24));
 files = photometry_output_files(cfg);
 verifyTrue(testCase, isfile(files.phase_summary));
 verifyTrue(testCase, isfile(files.artifact_suggestions));

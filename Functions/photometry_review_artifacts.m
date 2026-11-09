@@ -23,15 +23,17 @@ function data = photometry_review_artifacts(data, cfg)
 %
 % Output
 %   data.manual_mask     true where you removed samples
-%   data.manual_windows  one row per removed stretch: phase, start and end
-%                        (seconds from the start of the analysis window and
-%                        ZT hours)
+%   data.manual_windows  one row per removed stretch: phase, start and end in
+%                        seconds from the start of the analysis window, and
+%                        the day and Zeitgeber time (0-24) of its start and
+%                        end (see photometry_zt)
 % Running this step again starts the review from scratch.
 
+window_columns = {'phase', 'start_s', 'end_s', 'start_day', 'start_zt_hours', 'end_day', 'end_zt_hours'};
 n = numel(data.time_s);
 data.manual_mask = false(n, 1);
-data.manual_windows = table('Size', [0 5], 'VariableTypes', repmat({'double'}, 1, 5), ...
-    'VariableNames', {'phase', 'start_s', 'end_s', 'start_zt_hours', 'end_zt_hours'});
+data.manual_windows = table('Size', [0 numel(window_columns)], ...
+    'VariableTypes', repmat({'double'}, 1, numel(window_columns)), 'VariableNames', window_columns);
 if ~cfg.manual_review
     fprintf('Manual artifact removal skipped.\n');
     return;
@@ -56,7 +58,9 @@ n = numel(data.time_s);
 mask = false(n, 1);
 idx = (data.phase_windows(p, 1):data.phase_windows(p, 2))';
 t_min = (data.time_s(idx) - data.time_s(idx(1)))/60;      % minutes since phase start
-zt0 = data.crop_info.reference_zt;
+h0 = data.crop_info.start_hours_from_lights_on;            % time zero in hours from the first lights ON
+[~, ~, from] = photometry_zt(h0 + data.time_s(idx(1))/3600);
+[~, ~, to] = photometry_zt(h0 + data.time_s(idx(end))/3600);
 
 fig = figure('Color', 'w', 'Name', sprintf('Manual artifact removal - %s', data.phase_names{p}), ...
     'NumberTitle', 'off');
@@ -72,8 +76,8 @@ plot(ax, t_min, data.corrected405(idx), 'Color', [0 0.3 0.9], 'LineWidth', 0.8);
 ylabel(ax, '405, bleaching-corrected');
 xlabel(ax, 'Minutes since the start of this phase');
 grid(ax, 'on');
-title(ax, sprintf('%s (ZT %.2f to %.2f h): select bad stretches of the green trace, then Apply', ...
-    data.phase_names{p}, zt0 + data.time_s(idx(1))/3600, zt0 + data.time_s(idx(end))/3600));
+title(ax, sprintf('%s (%s to %s): select bad stretches of the green trace, then Apply', ...
+    data.phase_names{p}, from, to));
 
 uicontrol(fig, 'Style', 'text', 'Units', 'normalized', 'Position', [0.01 0.93 0.70 0.06], ...
     'BackgroundColor', 'w', 'HorizontalAlignment', 'left', 'String', ...
@@ -119,10 +123,12 @@ function windows = windows_from_mask(mask, p, data)
 edges = diff([false; mask(:); false]);
 first = find(edges == 1);
 last = find(edges == -1) - 1;
-zt0 = data.crop_info.reference_zt;
+h0 = data.crop_info.start_hours_from_lights_on;            % time zero in hours from the first lights ON
+[start_zt, start_day] = photometry_zt(h0 + data.time_s(first)/3600);
+[end_zt, end_day] = photometry_zt(h0 + data.time_s(last)/3600);
 windows = table(repmat(p, numel(first), 1), data.time_s(first), data.time_s(last), ...
-    zt0 + data.time_s(first)/3600, zt0 + data.time_s(last)/3600, ...
-    'VariableNames', {'phase', 'start_s', 'end_s', 'start_zt_hours', 'end_zt_hours'});
+    start_day, start_zt, end_day, end_zt, 'VariableNames', ...
+    {'phase', 'start_s', 'end_s', 'start_day', 'start_zt_hours', 'end_day', 'end_zt_hours'});
 end
 
 function finish(fig, action)

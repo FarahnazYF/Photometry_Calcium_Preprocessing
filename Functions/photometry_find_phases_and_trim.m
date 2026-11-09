@@ -41,13 +41,14 @@ data.aligned470 = interp1(data.time470_s(inside), data.raw470(inside), data.time
 data.trim_mask = false(size(data.time_s));
 n_start = round(cfg.trim_start_sec*cfg.sample_rate_hz);   % seconds -> samples
 n_end   = round(cfg.trim_end_sec*cfg.sample_rate_hz);
-zt0 = data.crop_info.reference_zt;   % ZT of time zero (e.g. -1)
+h0 = data.crop_info.start_hours_from_lights_on;   % time zero in hours from the first lights ON (e.g. -1)
 for p = 1:n_phases
     a = data.phase_windows(p, 1);
     b = data.phase_windows(p, 2);
     data.trim_mask(a:min(a+n_start-1, b)) = true;
     data.trim_mask(max(a, b-n_end+1):b) = true;
-    fprintf('Phase %d: ZT %.2f to %.2f h (%.1f minutes).\n', p, ...
-        zt0 + data.time_s(a)/3600, zt0 + data.time_s(b)/3600, (data.time_s(b)-data.time_s(a))/60);
+    [~, ~, from] = photometry_zt(h0 + data.time_s(a)/3600);
+    [~, ~, to] = photometry_zt(h0 + data.time_s(b)/3600);
+    fprintf('Phase %d: %s to %s, %.1f minutes.\n', p, from, to, (data.time_s(b)-data.time_s(a))/60);
 end
 end

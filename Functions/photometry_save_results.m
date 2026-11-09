@@ -11,8 +11,13 @@ function output_file = photometry_save_results(data, cfg)
 % per second); NaN = missing (trimmed, removed or excluded).
 %
 %   results.time_s            seconds since the start of the analysis window
-%                             (gaps between phases are kept)
-%   results.zt_hours          the same time as Zeitgeber time (lights ON = 0)
+%                             (gaps between phases are kept; keeps increasing,
+%                             so use it to put samples in order or to plot)
+%   results.zt_hours          Zeitgeber time in hours, 0 to 24: restarts at 0
+%                             at every lights ON (ZT 24 = ZT 0 of the next day)
+%   results.day               which lights ON the sample follows: 1, 2, 3, ...
+%                             (0 = before the first lights ON, e.g. ZT 23 when
+%                             the analysis starts 1 hour before lights ON)
 %   results.phase_windows     [first last] sample number of each phase
 %
 %   results.no_rolling_median.dF_F       dF/F (fraction; x100 = %)
@@ -42,7 +47,7 @@ if files.longest_path > 259
 end
 if ~isfolder(files.folder), mkdir(files.folder); end
 
-zt0 = data.crop_info.reference_zt;
+h0 = data.crop_info.start_hours_from_lights_on;   % time zero in hours from the first lights ON
 results = struct();
 results.description = ['Calcium fibre-photometry preprocessing: LED-pulse extraction, ' ...
     'phase-edge trims, 405 sawtooth removal, low-pass filter, double-exponential bleaching ' ...
@@ -57,7 +62,7 @@ results.sample_rate_hz = cfg.sample_rate_hz;
 
 % ---- Time --------------------------------------------------------------------
 results.time_s = data.time_s(:);
-results.zt_hours = zt0 + data.time_s(:)/3600;
+[results.zt_hours, results.day] = photometry_zt(h0 + data.time_s(:)/3600);
 results.phase_windows = data.phase_windows;
 results.phase_names = data.phase_names;
 
@@ -106,10 +111,10 @@ if ~isempty(results.sawtooth.windows)
 end
 if cfg.save_trace_csv
     fprintf('Writing every sample to a CSV file (this can take a few minutes) ...\n');
-    trace = table(results.time_s, results.zt_hours, ...
+    trace = table(results.time_s, results.day, results.zt_hours, ...
         results.no_rolling_median.dF_F, results.no_rolling_median.z, results.no_rolling_median.z_robust, ...
         results.rolling_median.dF_F, results.rolling_median.z, results.rolling_median.z_robust, ...
-        'VariableNames', {'time_s', 'zt_hours', 'dF_F', 'z', 'z_robust', ...
+        'VariableNames', {'time_s', 'day', 'zt_hours', 'dF_F', 'z', 'z_robust', ...
         'dF_F_rolling_median', 'z_rolling_median', 'z_robust_rolling_median'});
     writetable(trace, files.trace_csv);
 end

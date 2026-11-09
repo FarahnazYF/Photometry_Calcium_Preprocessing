@@ -81,6 +81,7 @@ Photometry_Calcium_Preprocessing/
 │   ├── photometry_rolling_median.m        rolling-median subtraction
 │   ├── photometry_save_results.m          saving (uses photometry_phase_summary.m, photometry_output_files.m)
 │   ├── photometry_plot_qc.m               the quality-control figures
+│   ├── photometry_zt.m                    Zeitgeber time (0-24, restarting at every lights ON) and day
 │   └── ...                                small helpers (clock times, EDF header, plotting)
 ├── tests/                        <- automatic checks on a synthetic recording (optional)
 ├── README.md                     <- this file
@@ -150,8 +151,8 @@ Different variable names or pulse timing? See
    1. choose your **raw MAT recording**;
    2. type the time the **lights turn ON** (24-hour clock, e.g. `07:00`);
    3. check the **preview** of where the recording will be cut and click
-      **Continue** (the analysis starts 1 hour before lights ON, i.e. ZT-1, and
-      lasts 49 hours);
+      **Continue** (the analysis starts 1 hour before lights ON, i.e. ZT-1 =
+      ZT 23, and lasts 49 hours);
    4. choose whether to **remove artifacts by hand** (*Review*) or not (*Skip review*).
 5. Wait. The Command Window reports each step, and a figure appears after
    most steps (see [Quality-control figures](#quality-control-figures)). A
@@ -176,9 +177,12 @@ Different variable names or pulse timing? See
 | 6 | 405 against 470 with the IRLS line, and 470 with the fitted 405 | the line follows the bulk of the points |
 | 7 | final dF/F without and with the rolling median | no remaining artifacts; zoom in to see every sample |
 
-The x axis is Zeitgeber time (ZT 0 = lights ON). Long traces are drawn with
-fewer points to keep the figures fast (display only; short peaks are kept).
-Figure 7 redraws every sample once you zoom in to a few minutes.
+The x axis is Zeitgeber time (ZT): ZT 0 = lights ON, and ZT restarts at 0 at
+every lights ON (ZT 24 is ZT 0 of the next day, so a 49-hour recording reads
+ZT 23, 0 ... 23, 0 ... 23, 0). Dashed lines mark every ZT 0, with its day
+number, and every ZT 12. Long traces are drawn with fewer points to keep the
+figures fast (display only; short peaks are kept). Figure 7 redraws every
+sample once you zoom in to a few minutes.
 
 ## Removing artifacts by hand
 
@@ -215,7 +219,7 @@ defaults are the values we use; change them only if you have a reason.
 | Setting | Default | Meaning |
 |---|---|---|
 | `cfg.lights_on` | `'08:00'` | default answer in the lights-ON dialog |
-| `cfg.hours_before_lights_on` | `1` | the analysis starts this many hours before lights ON (1 = ZT-1) |
+| `cfg.hours_before_lights_on` | `1` | the analysis starts this many hours before lights ON (1 = ZT-1, i.e. ZT 23) |
 | `cfg.duration_hours` | `49` | hours to analyse; `Inf` = until the end of the recording |
 | `cfg.recording_start` | `''` | empty = read automatically; or type e.g. `'06:56:16'` |
 | `cfg.phase_gap_sec` | `1800` | a pause in the LED pulses longer than this (s) starts a new phase |
@@ -240,10 +244,16 @@ are explained in the script itself.
 ## The steps in more detail
 
 **3. Cut to the analysis window.** The window starts at a fixed clock time,
-1 hour before lights ON (ZT-1), so that recordings from different animals
-line up on the same Zeitgeber time. Example: recording start 06:56:16 and
-lights ON 08:00 &rarr; the analysis starts at 07:00:00 and the first 3 min
-44 s are not used.
+1 hour before lights ON (ZT-1, which is ZT 23 of the previous day), so that
+recordings from different animals line up on the same Zeitgeber time.
+Example: recording start 06:56:16 and lights ON 08:00 &rarr; the analysis
+starts at 07:00:00 and the first 3 min 44 s are not used.
+
+Zeitgeber time (ZT) is counted from lights ON (ZT 0) and restarts at 0 at
+every lights ON: ZT 24 is ZT 0 of the next day, so there is no ZT 36. The
+pipeline therefore reports ZT together with a **day** number: day 1 starts
+at the first lights ON, day 2 at the second, and so on; the hour before the
+first lights ON is day 0 (ZT 23).
 
 **4. One value per LED pulse.** The LED monitor channels show when each LED is
 on. During every pulse, the median of the PMT signal is taken (one value per
@@ -329,8 +339,9 @@ All per-sample fields are column vectors with one value per 405 pulse
 
 | Field | Content |
 |---|---|
-| `results.time_s` | time of each sample in seconds from the start of the analysis window (pauses between phases are kept) |
-| `results.zt_hours` | the same time as Zeitgeber time in hours (lights ON = 0; the window starts at ZT-1) |
+| `results.time_s` | time of each sample in seconds from the start of the analysis window (pauses between phases are kept; keeps increasing, so use it to order or plot the samples) |
+| `results.zt_hours` | Zeitgeber time in hours, 0 to 24: restarts at 0 at every lights ON (ZT 24 = ZT 0 of the next day) |
+| `results.day` | which lights ON the sample follows: 1, 2, 3, ... (0 = before the first lights ON, i.e. the first hour, ZT 23) |
 | `results.no_rolling_median.dF_F` | **dF/F** (fraction) |
 | `results.no_rolling_median.z` | z-score of dF/F |
 | `results.no_rolling_median.z_robust` | robust z-score of dF/F |
@@ -344,16 +355,26 @@ All per-sample fields are column vectors with one value per 405 pulse
 | `results.motion_fit` | slope, intercept and tuning constant of the IRLS fit |
 | `results.bleaching` | per phase: the method used and the coefficients a-d |
 | `results.sawtooth`, `results.lowpass` | details of Steps 6 and 7 |
-| `results.crop_info` | recording start, lights ON, start of the analysis window (`reference_clock`), seconds skipped (`offset_sec`) |
+| `results.crop_info` | recording start, lights ON, start of the analysis window (`reference_clock`), seconds skipped (`offset_sec`), and where the window starts relative to lights ON (`start_hours_from_lights_on`, -1 = 1 hour before) |
 | `results.settings` | every setting used |
 
 ### Loading the results in MATLAB
 
 ```matlab
 load('Mouse1_calcium_preprocessed.mat')        % creates the variable "results"
-plot(results.zt_hours, 100*results.no_rolling_median.dF_F)
-xlabel('ZT (hours)'), ylabel('dF/F (%)')
+dff = 100*results.no_rolling_median.dF_F;      % dF/F in %
+
+% Plot in time order (ZT itself restarts every 24 h, so use time_s for the x axis)
+plot(results.time_s/3600, dff)
+xlabel('Hours from the start of the analysis'), ylabel('dF/F (%)')
+
+% Select by day and Zeitgeber time, e.g. the first 6 hours of day 2 (ZT 0-6)
+keep = results.day == 2 & results.zt_hours < 6;
+mean(dff(keep), 'omitnan')
 ```
+
+The tables (`phase_summary`, `artifact_suggestions`, `manual_windows`) give
+times the same way: a `..._day` and a `..._zt_hours` column (0-24).
 
 The file is a MAT v7.3 (HDF5) file, so one field can be read without loading
 the rest:

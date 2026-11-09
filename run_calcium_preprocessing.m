@@ -51,7 +51,7 @@ cfg.led470_variable = 'Raw_3';    % name in the MAT file: 470-nm LED monitor (sh
 
 % --- Which part of the recording to analyse (Step 3) -------------------
 cfg.lights_on              = '08:00'; % default answer shown in the "Lights ON" dialog
-cfg.hours_before_lights_on = 1;       % analysis starts this many hours before lights ON (1 = ZT-1)
+cfg.hours_before_lights_on = 1;       % analysis starts this many hours before lights ON (1 = ZT-1, i.e. ZT 23)
 cfg.duration_hours         = 49;      % hours to keep; Inf = keep everything to the end
 cfg.recording_start        = '';      % leave empty: the clock time of the first sample is read
                                       % from the MAT file or its EDF. Type it (e.g. '06:56:16')

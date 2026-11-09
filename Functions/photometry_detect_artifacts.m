@@ -23,9 +23,9 @@ function data = photometry_detect_artifacts(data, cfg)
 %   data.preliminary_residual        the residual of step 1
 %   data.preliminary_fit             [slope intercept] of the preliminary fit
 %   data.artifact_suggestion_mask    true inside a suggested event
-%   data.artifact_suggestions        one row per event (phase, start, end,
-%                                    peak time in seconds and ZT hours,
-%                                    duration, peak size)
+%   data.artifact_suggestions        one row per event (phase, start, end and
+%                                    peak time in seconds, peak time as ZT
+%                                    hours (0-24) and day, duration, peak size)
 
 % ---- 1. Preliminary motion correction (IRLS) ------------------------------
 valid = isfinite(data.corrected405) & isfinite(data.corrected470);
@@ -39,7 +39,7 @@ data.preliminary_residual = data.corrected470 - polyval(data.preliminary_fit, da
 robust_sd = @(y) 1.4826*mad(y, 1);
 min_distance = max(1, round(cfg.artifact_min_peak_distance_sec*cfg.sample_rate_hz));
 min_samples = max(10, round(40*cfg.sample_rate_hz));    % phases with < 40 s of data are skipped
-zt0 = data.crop_info.reference_zt;
+h0 = data.crop_info.start_hours_from_lights_on;   % time zero in hours from the first lights ON
 data.artifact_suggestion_mask = false(size(data.preliminary_residual));
 rows = cell(0, 1);
 for p = 1:size(data.phase_windows, 1)
@@ -79,13 +79,14 @@ for p = 1:size(data.phase_windows, 1)
         duration = data.time_s(b) - data.time_s(a);
         if duration <= cfg.artifact_max_duration_sec
             data.artifact_suggestion_mask(a:b) = true;
+            [peak_zt, peak_day] = photometry_zt(h0 + data.time_s(peak)/3600);
             rows{end+1, 1} = {p, data.time_s(a), data.time_s(b), data.time_s(peak), ...
-                zt0 + data.time_s(peak)/3600, duration, y(loc) - centre}; %#ok<AGROW>
+                peak_zt, peak_day, duration, y(loc) - centre}; %#ok<AGROW>
         end
     end
 end
 
-names = {'phase', 'start_s', 'end_s', 'peak_s', 'peak_zt_hours', 'duration_s', 'peak_size'};
+names = {'phase', 'start_s', 'end_s', 'peak_s', 'peak_zt_hours', 'peak_day', 'duration_s', 'peak_size'};
 if isempty(rows)
     data.artifact_suggestions = table('Size', [0 numel(names)], ...
         'VariableTypes', repmat({'double'}, 1, numel(names)), 'VariableNames', names);
