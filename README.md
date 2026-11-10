@@ -180,7 +180,8 @@ Different variable names or pulse timing? See
 The x axis is Zeitgeber time (ZT): ZT 0 = lights ON, and ZT restarts at 0 at
 every lights ON (ZT 24 is ZT 0 of the next day, so a 49-hour recording reads
 ZT 23, 0 ... 23, 0 ... 23, 0). Dashed lines mark every ZT 0, with its day
-number, and every ZT 12. Long traces are drawn with fewer points to keep the
+number, and every ZT 12. Clicking (or hovering over) a trace shows its ZT and
+day in the data tip. Long traces are drawn with fewer points to keep the
 figures fast (display only; short peaks are kept). Figure 7 redraws every
 sample once you zoom in to a few minutes.
 

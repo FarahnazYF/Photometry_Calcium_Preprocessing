@@ -139,12 +139,19 @@ end
 
 function testFigureAxisShowsZeitgeberTime(testCase)
 % The time axis of the figures is labelled 0-24 (restarting at every lights
-% ON), also after zooming.
+% ON), also after zooming, and the data tips of the traces show ZT and day
+% instead of the raw x value (hours from the first lights ON).
 f = figure('Visible', 'off');
 testCase.addTeardown(@() close(f));
 ax = axes(f);
 plot(ax, [-1 48], [0 0]);
+trace = plot(ax, [-0.5 10 30.25 47.9], [1 2 3 4], 'HandleVisibility', 'off');   % like the figure traces
 photometry_zt_axis(ax, [-1 48]);
+tip = datatip(trace, 'DataIndex', 3);                   % x = 30.25 h = ZT 6.25 of day 2
+verifyEqual(testCase, string(tip.Content), ["ZT (h) 6.25"; "Day 2"; "Y 3"]);
+tip = datatip(trace, 'DataIndex', 1);                   % x = -0.5 h = ZT 23.5 before the first lights ON
+verifyEqual(testCase, string(tip.Content), ["ZT (h) 23.5"; "Day 0"; "Y 1"]);
+delete(findall(ax, 'Type', 'datatip'));
 drawnow;
 labels = str2double(ax.XTickLabel);
 verifyTrue(testCase, all(labels >= 0 & labels < 24));
@@ -155,6 +162,11 @@ verifyEqual(testCase, sort(string({marks.Label})), ...
 xlim(ax, [30 36]);                                       % zoom in on day 2, ZT 6-12
 drawnow;
 verifyEqual(testCase, str2double(ax.XTickLabel)', 6:12);
+for view = {[30 31], [23.7 24.2], [-1 -0.5]}            % close-ups, including across lights ON
+    xlim(ax, view{1});
+    drawnow;
+    verifyEqual(testCase, str2double(ax.XTickLabel)', mod(round(mod(ax.XTick, 24), 4), 24), 'AbsTol', 1e-9);
+end
 end
 
 function testRecordingStartFromMatFile(testCase)

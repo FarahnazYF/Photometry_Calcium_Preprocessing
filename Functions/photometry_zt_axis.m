@@ -16,10 +16,17 @@ function photometry_zt_axis(axes_list, range)
 % Also draws a dashed line at every ZT 0 (labelled with the day number)
 % and every ZT 12, links the zoom of all axes, and keeps the labels
 % correct when you zoom or pan.
+%
+% Data tips: when you click (or hover over) a trace, MATLAB would show its
+% raw x value, i.e. hours from the first lights ON (e.g. 30.25). The data
+% tips of every trace already drawn in these axes are changed to show
+% "ZT (h)" (e.g. 6.25) and "Day" (e.g. 2) instead. Call this function after
+% plotting.
 
 if range(2) <= range(1), range(2) = range(1) + 1/3600; end   % at least 1 s wide
 for ax = axes_list(:)'
     grid(ax, 'on');
+    zt_data_tips(ax);
     for mark = 12*ceil(range(1)/12):12:range(2)
         [zt, day] = photometry_zt(mark);
         if zt == 0
@@ -61,4 +68,24 @@ else
     ax.XTick = ticks;
 end
 ax.XTickLabel = compose('%g', mod(round(photometry_zt(ticks), 4), 24));
+end
+
+function zt_data_tips(ax)
+% Data tips of every trace: ZT (h) and Day instead of the raw x value.
+% The traces are hidden from the legend, so findall (not findobj) is used.
+for line = findall(ax, 'Type', 'line')'
+    rows = line.DataTipTemplate.DataTipRows;      % default: X, then Y
+    line.DataTipTemplate.DataTipRows = [ ...
+        dataTipTextRow('ZT (h)', @zt_value); ...
+        dataTipTextRow('Day', @day_value); ...
+        rows(2:end)];
+end
+end
+
+function zt = zt_value(hours)
+zt = round(photometry_zt(hours), 4);
+end
+
+function day = day_value(hours)
+[~, day] = photometry_zt(hours);
 end
