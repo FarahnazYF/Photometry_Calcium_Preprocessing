@@ -14,12 +14,19 @@ function data = photometry_remove_sawtooth(data, cfg)
 % How (details in photometry_estimate_sawtooth)
 %   The trimmed 405 is split into phases and gap-free stretches. In sliding
 %   10-minute windows the exact period is found, the average shape of one
-%   cycle is measured, and that shape is subtracted. A window is changed
-%   only if the sawtooth is clearly stronger than the noise
-%   (cfg.sawtooth_min_snr), so recordings without a sawtooth stay unchanged.
+%   cycle is measured, and that shape is subtracted. The shape of a window
+%   is used only if the sawtooth is clearly stronger than the noise there
+%   (cfg.sawtooth_min_snr). A recording without a sawtooth is therefore
+%   normally left unchanged; the Command Window, Figure 2 and the saved
+%   table of windows show what was subtracted.
 %
 % What changes
 %   Only 405. No sample is removed or added; missing samples stay missing.
+%
+% What this step assumes
+%   That the sawtooth is in the 405 channel only. The 470 channel is not
+%   examined. If your recordings have no such sawtooth, set
+%   cfg.remove_sawtooth = false.
 %
 % Output
 %   data.trimmed470         470 with the trimmed samples set to NaN
@@ -36,6 +43,10 @@ trimmed405 = data.raw405(:);
 trimmed405(data.trim_mask) = NaN;
 data.trimmed470 = data.aligned470(:);
 data.trimmed470(data.trim_mask) = NaN;
+
+data = photometry_note_step(data, 6, cfg, {'remove_sawtooth', 'sawtooth_period_sec', ...
+    'sawtooth_search_sec', 'sawtooth_window_sec', 'sawtooth_period_span_sec', ...
+    'sawtooth_min_snr', 'sawtooth_harmonics'});
 
 if ~cfg.remove_sawtooth
     data.cleaned405 = trimmed405;

@@ -13,7 +13,10 @@ function cfg = photometry_select_recording(cfg)
 %      file with the same name in the same folder. If neither stores it,
 %      you can choose the EDF file yourself or type the start time.
 %      (Skipped when cfg.recording_start is set in the settings.)
-%   4. A preview shows where the recording will be cut. Click Continue.
+%      An EDF file is checked against the MAT file (same length); see
+%      photometry_find_recording_start.
+%   4. A preview shows the start time, whether it was checked, and where
+%      the recording will be cut. Click Continue.
 %   5. Choose whether to remove artifacts by hand (Step 10).
 %
 % Returns cfg with these fields added, or [] if you click Cancel:
@@ -39,13 +42,15 @@ cfg.lights_on = lights_on;
 if ~isempty(cfg.recording_start)
     % Set by hand in the settings: check the format, then use it.
     photometry_crop_indices(cfg.recording_start, '08:00', 1, 1);
-    cfg.recording_start_info = start_info('set in the settings (cfg.recording_start)', '', cfg.recording_start);
+    cfg.recording_start_info = start_info('set in the settings (cfg.recording_start)', ...
+        cfg.recording_start, 'Set by hand in the settings (not checked).');
 else
     edf_file = '';
+    channel_names = {cfg.pmt_variable, cfg.led405_variable, cfg.led470_variable};
     while true
         try
             [cfg.recording_start, cfg.recording_start_info] = photometry_find_recording_start( ...
-                cfg.input_file, edf_file, cfg.raw_sampling_rate_hz);
+                cfg.input_file, edf_file, cfg.raw_sampling_rate_hz, channel_names);
             break;
         catch err
             if ~strcmp(err.identifier, 'photometry:MissingRecordingStart')
@@ -68,7 +73,8 @@ else
                         'Recording start', '');
                     if isempty(typed), cfg = []; return; end
                     cfg.recording_start = typed;
-                    cfg.recording_start_info = start_info('typed in the dialog', '', typed);
+                    cfg.recording_start_info = start_info('typed in the dialog', typed, ...
+                        'Typed by hand (not checked).');
                     break;
                 otherwise
                     cfg = []; return;
@@ -86,11 +92,19 @@ else
     keep_text = sprintf('Keep %g hours.', cfg.duration_hours);
 end
 [~, ~, start_label] = photometry_zt(crop.start_hours_from_lights_on);
-message = sprintf(['Recording start: %s\n(read from: %s)\n\n' ...
+% Was the start time checked against the MAT file? An EDF file that could
+% not be checked gets a warning: a start time from the wrong EDF file would
+% shift the analysis window and every Zeitgeber time.
+check_text = cfg.recording_start_info.verification_note;
+from_edf = startsWith(cfg.recording_start_info.method, 'EDF');
+if from_edf && ~cfg.recording_start_info.mat_length_verified
+    check_text = sprintf('WARNING: %s\nMake sure this EDF file belongs to this recording.', check_text);
+end
+message = sprintf(['Recording start: %s\n(read from: %s)\n%s\n\n' ...
     'Lights ON: %s (= ZT 0)\n' ...
     'The analysis starts at %s, %g hour(s) before lights ON (%s).\n' ...
     'The first %.2f minutes of the recording are not used.\n%s'], ...
-    cfg.recording_start, cfg.recording_start_info.method, cfg.lights_on, ...
+    cfg.recording_start, cfg.recording_start_info.method, check_text, cfg.lights_on, ...
     crop.reference_clock, cfg.hours_before_lights_on, start_label, ...
     crop.offset_sec/60, keep_text);
 if crop.offset_sec > 12*3600
@@ -132,6 +146,7 @@ end
 
 fprintf('Recording : %s\n', cfg.input_file);
 fprintf('Start     : %s (%s)\n', cfg.recording_start, cfg.recording_start_info.method);
+fprintf('            %s\n', strrep(check_text, newline, ' '));
 fprintf('Lights ON : %s | analysis starts at %s (%s); %.2f minutes skipped.\n', ...
     cfg.lights_on, crop.reference_clock, start_label, crop.offset_sec/60);
 fprintf('Results   : %s\n\n', cfg.output_folder);
@@ -155,11 +170,12 @@ while true
 end
 end
 
-function info = start_info(method, source_file, clock)
+function info = start_info(method, clock, note)
 % The same fields as photometry_find_recording_start returns.
 info.method = method;
-info.source_file = source_file;
+info.source_file = '';
 info.source_field = '';
 info.recording_start = clock;
 info.mat_length_verified = false;
+info.verification_note = note;
 end

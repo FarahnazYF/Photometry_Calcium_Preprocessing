@@ -104,8 +104,6 @@ cfg.max_plot_points = 20000;  % figures only: long traces are drawn with fewer p
 cfg.save_trace_csv  = false;  % also save every sample as a CSV file (large: ~1 GB for 49 h)
 cfg.output_root     = '';     % empty = a "calcium_preprocessing_results" folder next to the raw file
 
-cfg.pipeline_version = '1.0.0';
-
 %% 2. Choose the recording and type lights ON
 % Dialogs ask for the raw MAT file and the lights-ON time, read the
 % recording start, show where the recording will be cut, and ask whether
@@ -135,21 +133,27 @@ photometry_plot_qc('extracted', data, cfg);   % Figure 1
 %% 5. Find the recording phases, align 470 to 405, and trim the phase edges
 % Phases: the LEDs were switched off between recording blocks; every pause
 % longer than cfg.phase_gap_sec starts a new phase. Each phase is corrected
-% on its own in the next steps.
-% Alignment: the 470 pulses fall between the 405 pulses; 470 is
-% interpolated onto the 405 pulse times so both channels share one time axis.
+% on its own in the next steps. A shorter pause of the LEDs inside a phase
+% stays as a small gap in time (the Command Window reports it).
 % Trimming: the first and last seconds of each phase are marked as missing
 % (data.trim_mask). Nothing is deleted: missing samples are NaN, so the
 % time of every sample stays correct.
+% Alignment: the 470 pulses fall between the 405 pulses; 470 is
+% interpolated onto the 405 pulse times so both channels share one time
+% axis. Where two or more 470 pulses in a row are missing, the 470 value
+% is NaN (nothing is invented). A warning appears if the 470 LED was off
+% while the 405 LED kept flashing.
 data = photometry_find_phases_and_trim(data, cfg);
 
 %% 6. Remove the sawtooth from the 405 channel
 % Our 405 channel carries a small sawtooth-shaped ripple (period ~23.5 s)
 % that is not in the 470 channel. Without this step, the motion correction
 % (Step 11) would copy it, upside down, into dF/F. Its shape is estimated
-% in sliding 10-minute windows and subtracted from 405 only. A window is
-% changed only where the sawtooth is clearly present, so this step is safe
-% for recordings without it. Set cfg.remove_sawtooth = false to skip it.
+% in sliding 10-minute windows and subtracted from 405 only. The shape of
+% a window is used only where the sawtooth is clearly present, so a
+% recording without it is normally left unchanged (Figure 2 shows what was
+% removed). If your recordings have no such sawtooth, set
+% cfg.remove_sawtooth = false.
 data = photometry_remove_sawtooth(data, cfg);
 photometry_plot_qc('sawtooth', data, cfg);    % Figure 2
 
@@ -159,6 +163,8 @@ photometry_plot_qc('sawtooth', data, cfg);    % Figure 2
 %                            backwards, so the signal is not shifted in time.
 %   'rolling_mean':          centred rolling mean of cfg.rolling_mean_window_sec
 %                            seconds, used INSTEAD of the Butterworth.
+% Each phase is filtered on its own (and each stretch between two pulse
+% gaps), so the end of one phase cannot leak into the start of the next.
 data = photometry_lowpass_filter(data, cfg);
 photometry_plot_qc('lowpass', data, cfg);     % Figure 3
 
@@ -168,6 +174,11 @@ photometry_plot_qc('lowpass', data, cfg);     % Figure 3
 % and the channel is divided by it. Afterwards both channels hover around 1.
 % If the fit fails in a phase, a straight line is used there instead (a
 % warning says so).
+% IMPORTANT: because every phase is brought to about 1 on its own, the
+% signal LEVEL of one phase can no longer be compared with that of another
+% phase, and very slow changes within a phase (over tens of minutes) are
+% reduced. Changes over seconds to a few minutes are kept. See README.md,
+% "What the results can and cannot show".
 data = photometry_correct_bleaching(data, cfg);
 photometry_plot_qc('bleaching', data, cfg);   % Figure 4
 
@@ -214,24 +225,30 @@ photometry_plot_qc('motion', data, cfg);      % Figure 6
 
 %% 13. 1-minute rolling median (a second version of the results)
 % A centred rolling median of dF/F over cfg.rolling_median_window_sec
-% seconds is SUBTRACTED from dF/F. This removes slow changes (slower than
-% about a minute) and keeps fast transients. It never crosses a phase
-% boundary or a recording gap. Both versions are saved; choose the one
-% that suits your question (slow changes in the signal level are only in
-% the version WITHOUT the rolling median).
-[data.dF_F_rolling_median, data.rolling_median_baseline] = photometry_rolling_median( ...
+% seconds is SUBTRACTED from dF/F. This removes changes slower than about
+% a minute and keeps fast transients. It never crosses a phase boundary or
+% a recording gap. Both versions are saved; choose the one that suits your
+% question. Changes over a few minutes within a phase are only in the
+% version WITHOUT the rolling median. (Neither version keeps differences
+% in level between phases: see the note in Step 8.)
+[data.dF_F_rolling_median, data.rolling_median_baseline, data.rolling_median_info] = photometry_rolling_median( ...
     data.dF_F, data.time_s, data.phase_windows, cfg.sample_rate_hz, cfg.rolling_median_window_sec);
 [data.z_rolling_median, data.z_robust_rolling_median, data.z_info_rolling_median] = ...
     photometry_zscore(data.dF_F_rolling_median);
 photometry_plot_qc('final', data, cfg);       % Figure 7
 
 %% 14. Save the results
-% Writes a new results folder (nothing is overwritten) with:
+% Writes a new results folder with:
 %   <recording>_calcium_preprocessed.mat   the results (variable "results")
 %   <recording>_phase_summary.csv          one row per phase
 %   <recording>_artifact_suggestions.csv   the automatic suggestions (Step 9)
 %   <recording>_manual_removed_windows.csv the stretches you removed (Step 10)
 %   <recording>_sawtooth_windows.csv       the sawtooth windows (Step 6)
 % See README.md ("Output") for every field of "results".
+% Nothing is ever overwritten: if you save again in the same session, the
+% new results go to a second folder ending in _2.
+% If you ran an earlier section again (Run Section), run all the sections
+% after it again too, in order; otherwise this step stops and tells you
+% which steps are out of date.
 output_file = photometry_save_results(data, cfg);
 fprintf('\nFinished in %.1f minutes.\nResults saved in:\n  %s\n', toc(pipeline_timer)/60, output_file);

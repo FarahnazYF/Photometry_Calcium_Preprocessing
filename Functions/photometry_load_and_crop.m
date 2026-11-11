@@ -17,6 +17,7 @@ function raw = photometry_load_and_crop(cfg)
 %   raw.crop_info                    where the window starts and ends (see
 %                                    photometry_crop_indices), plus how the
 %                                    recording start was found
+%   raw.applied_settings             the settings this step used
 
 fs = cfg.raw_sampling_rate_hz;
 names = {cfg.pmt_variable, cfg.led405_variable, cfg.led470_variable};
@@ -87,5 +88,12 @@ raw.pmt    = double(channels{1}(:));
 raw.led405 = double(channels{2}(:));
 raw.led470 = double(channels{3}(:));
 raw.fs = fs;
+
+% The settings this step used. They are saved with the results, so the
+% saved settings always describe what was really done (photometry_note_step).
+for name = {'input_file', 'pmt_variable', 'led405_variable', 'led470_variable', ...
+        'raw_sampling_rate_hz', 'recording_start', 'lights_on', 'hours_before_lights_on', 'duration_hours'}
+    raw.applied_settings.(name{1}) = cfg.(name{1});
+end
 fprintf('Loaded %.2f hours (raw samples %d to %d).\n', numel(raw.pmt)/fs/3600, first, last);
 end

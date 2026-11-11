@@ -17,11 +17,20 @@ function [file, truth] = make_synthetic_recording(folder, varargin)
 %   - a 23.5-s sawtooth (0.4% of the level) in 405 only;
 %   - a little white noise.
 %
-% Options: 'PhaseMinutes' (12), 'GapMinutes' (31), 'Sawtooth' (true), 'Seed' (1)
+% Options: 'PhaseMinutes' (12), 'GapMinutes' (31), 'Sawtooth' (true), 'Seed' (1),
+%          'Drop470' ([] = none; [from to] in seconds: the 470 LED is off
+%          between these two times while the 405 LED keeps flashing)
+%          'LedPause' ([] = none; [from to] in seconds: both LEDs are off
+%          between these two times, a short pause inside a phase)
 % truth: the times of the movement dips and the transients, and the true
 %        sawtooth (a function of time, in PMT units).
+%
+% Note: the bleaching in this recording is mild (the fast part decays over
+% 8 to 10 minutes). Real recordings can fall more steeply in the first
+% minutes after the LEDs are switched on.
 
-options = struct('PhaseMinutes', 12, 'GapMinutes', 31, 'Sawtooth', true, 'Seed', 1);
+options = struct('PhaseMinutes', 12, 'GapMinutes', 31, 'Sawtooth', true, 'Seed', 1, 'Drop470', [], ...
+    'LedPause', []);
 for k = 1:2:numel(varargin), options.(varargin{k}) = varargin{k+1}; end
 rng(options.Seed);
 
@@ -32,11 +41,17 @@ n = 2*phase_samples + gap_samples;
 t = (0:n-1)'/fs;                                     % seconds
 active = true(n, 1);
 active(phase_samples+1:phase_samples+gap_samples) = false;   % LEDs off between phases
+if ~isempty(options.LedPause)
+    active(t >= options.LedPause(1) & t < options.LedPause(2)) = false;   % both LEDs pause
+end
 
 % LED monitors: 405 on for samples 0-9, 470 on for 10-19 of every 20.
 cycle = mod((0:n-1)', 20);
 Raw_2 = double(cycle < 10 & active);
 Raw_3 = double(cycle >= 10 & active);
+if ~isempty(options.Drop470)
+    Raw_3(t >= options.Drop470(1) & t < options.Drop470(2)) = 0;   % the 470 LED drops out
+end
 
 % Movement: a slow wobble in both channels (470 moves 0.7x as much as 405,
 % which the motion correction removes), and short artifacts (about 2 s)

@@ -15,6 +15,10 @@ This pipeline only preprocesses the photometry signal. Combining the results
 with EEG/EMG (sleep stages, etc.) is meant to happen in a separate analysis
 that loads the saved results (see [Matching the results to EEG](#matching-the-results-to-eeg)).
 
+**Current version: 1.1.0.** [CHANGELOG.md](CHANGELOG.md) lists what changed
+since 1.0.0. Before you interpret the results, read
+[What the results can and cannot show](#what-the-results-can-and-cannot-show).
+
 ---
 
 ## Contents
@@ -82,9 +86,11 @@ Photometry_Calcium_Preprocessing/
 │   ├── photometry_save_results.m          saving (uses photometry_phase_summary.m, photometry_output_files.m)
 │   ├── photometry_plot_qc.m               the quality-control figures
 │   ├── photometry_zt.m                    Zeitgeber time (0-24, restarting at every lights ON) and day
+│   ├── photometry_version.m               version number and fingerprint of the code
 │   └── ...                                small helpers (clock times, EDF header, plotting)
-├── tests/                        <- automatic checks on a synthetic recording (optional)
+├── tests/                        <- automatic checks on synthetic data (optional)
 ├── README.md                     <- this file
+├── CHANGELOG.md                  <- what changed in each version
 ├── LICENSE
 └── CITATION.cff
 ```
@@ -96,12 +102,16 @@ MATLAB Command Window to read it.
 ## Requirements
 
 - **MATLAB R2020a or newer** (developed and tested on R2023b, Windows).
-- **Signal Processing Toolbox** (`butter`, `filtfilt`, `findpeaks`, `medfilt1`)
+- **Signal Processing Toolbox** (`butter`, `filtfilt`, `findpeaks`)
 - **Statistics and Machine Learning Toolbox** (`robustfit`, `mad`, `prctile`)
 - **Curve Fitting Toolbox** (`fit`, `fittype`)
-- Memory: long recordings need several GB of free RAM while the raw file is
-  loaded (roughly 6-8 GB for 49 hours at 1000 Hz). The raw arrays are released
-  after Step 4.
+- Memory: about **6 GB of free RAM** for 49 hours at 1000 Hz. The three raw
+  channels (1.4 GB each) stay in memory until Step 4 has finished, and Steps
+  3 and 4 need up to 2 GB more for a short time. After Step 4 the raw channels
+  are released and the remaining steps need less. (Measured on a 2.5-hour
+  test recording, 34 bytes per raw sample of one channel at the peak, and
+  scaled to 49 hours; the need grows in proportion to the length of the
+  analysis window.)
 
 Not sure which toolboxes you have? Type `ver` in the Command Window. The
 script also checks this itself when it starts.
@@ -136,6 +146,13 @@ it automatically:
 If neither exists, a dialog lets you choose the EDF file yourself or type the
 start time.
 
+An EDF file is compared with the MAT file before its start time is used: the
+photometry channels must have the same sampling rate and the same number of
+samples in both files (if the channel names differ, the two recordings must
+be equally long). If they do not match, the pipeline stops, because the start
+time of another recording would shift every Zeitgeber time. If no comparison
+is possible, the preview dialog shows a warning.
+
 Different variable names or pulse timing? See
 [Using your own recording system](#using-your-own-recording-system).
 
@@ -161,9 +178,13 @@ Different variable names or pulse timing? See
 6. The results are saved in a new folder next to your raw file:
    `calcium_preprocessing_results/<recording>_<date>_<time>/`.
 
-> **Tip:** To re-run a single step after changing a setting, keep the
-> variables in the Workspace, click inside that section of the script, and
-> choose **Run Section** (Editor tab). Later steps must then be re-run too.
+> **Tip:** To change a setting and run only part of the pipeline again, keep
+> the variables in the Workspace, type the new value in the Command Window
+> (for example `cfg.butterworth_cutoff_hz = 2`), click inside the section of
+> that step and choose **Run Section** (Editor tab). Then run **every later
+> section** too, in order. Step 14 checks this: it does not save while a step
+> is out of date. The new results go to a second folder ending in `_2`; the
+> first results are kept.
 
 ### Quality-control figures
 
@@ -180,10 +201,11 @@ Different variable names or pulse timing? See
 The x axis is Zeitgeber time (ZT): ZT 0 = lights ON, and ZT restarts at 0 at
 every lights ON (ZT 24 is ZT 0 of the next day, so a 49-hour recording reads
 ZT 23, 0 ... 23, 0 ... 23, 0). Dashed lines mark every ZT 0, with its day
-number, and every ZT 12. Clicking (or hovering over) a trace shows its ZT and
-day in the data tip. Long traces are drawn with fewer points to keep the
-figures fast (display only; short peaks are kept). Figure 7 redraws every
-sample once you zoom in to a few minutes.
+number, and every ZT 12. When you zoom in, the ticks move to round values and
+are labelled in ZT hours with decimals (6.25 = 6 h 15 min). Clicking (or
+hovering over) a trace shows its ZT and day in the data tip. Long traces are
+drawn with fewer points to keep the figures fast (display only; short peaks
+are kept). Figure 7 redraws every sample once you zoom in to a few minutes.
 
 ## Removing artifacts by hand
 
@@ -230,7 +252,7 @@ defaults are the values we use; change them only if you have a reason.
 | `cfg.lowpass_method` | `'butterworth'` | `'butterworth'` or `'rolling_mean'` |
 | `cfg.butterworth_cutoff_hz` | `3` | Butterworth cut-off (Hz) |
 | `cfg.butterworth_order` | `2` | Butterworth order |
-| `cfg.rolling_mean_window_sec` | `1` | rolling-mean window (s), if `lowpass_method = 'rolling_mean'` |
+| `cfg.rolling_mean_window_sec` | `1` | rolling-mean window (s), if `lowpass_method = 'rolling_mean'`; rounded to an odd number of samples (51 = 1.02 s) |
 | `cfg.irls_tuning_constant` | `1.4` | IRLS (Tukey bisquare) tuning constant; smaller = stricter |
 | `cfg.rolling_median_window_sec` | `60` | rolling-median window (s) for the second version of the results |
 | `cfg.show_figures` | `true` | show the quality-control figures |
@@ -257,33 +279,56 @@ at the first lights ON, day 2 at the second, and so on; the hour before the
 first lights ON is day 0 (ZT 23).
 
 **4. One value per LED pulse.** The LED monitor channels show when each LED is
-on. During every pulse, the median of the PMT signal is taken (one value per
-pulse, i.e. 50 values per second per channel), as in the combined EEG and
-fibre-photometry recordings of Patel et al. (2020). Time zero is the start of
-the analysis window.
+on: an LED counts as on while its monitor is above the level halfway between
+its "off" and its "on" level. (Normally these two levels are the 5th and the
+95th percentile of the monitor. If an LED is on for less than 5% or more than
+95% of the analysis window, the medians of the low and of the high monitor
+values are used instead.) During every pulse, the median of the PMT signal is
+taken (one value per pulse, i.e. 50 values per second per channel), as in the
+combined EEG and fibre-photometry recordings of Patel et al. (2020). Time
+zero is the start of the analysis window.
 
-**5. Phases, alignment, trimming.** A pause in the pulses longer than 30 min
-separates two phases; each phase is corrected separately. The 470 values are
-interpolated onto the 405 pulse times. The first 15 s and last 5 s of each
-phase are set to missing (`NaN`). No sample is ever deleted, so the time of
-every sample stays correct.
+**5. Phases, trimming, alignment.** A pause in the pulses longer than 30 min
+separates two phases; each phase is corrected separately. The first 15 s and
+last 5 s of each phase are set to missing (`NaN`). No sample is ever deleted,
+so the time of every sample stays correct. A shorter pause of the LEDs inside
+a phase (our system makes one of a fraction of a second in some phases) does
+not start a new phase and is not trimmed: it stays as a small gap in time,
+and the Command Window reports it.
+
+The 470 values are interpolated (pchip) onto the 405 pulse times. A 405 pulse
+gets a 470 value only if it lies between two 470 pulses that are at most 2.5
+pulse periods apart: one missing 470 pulse is bridged, a longer gap is not,
+and nothing is extrapolated. Two kinds of samples therefore have no 470 value
+(and no dF/F): the first sample after the LEDs switch on (at the start of a
+phase, where it is trimmed anyway, and after a short pause), and samples
+where the 470 LED was off while the 405 LED kept flashing. The second kind is
+a fault of the recording and gives a warning.
 
 **6. Sawtooth removal (405 only).** Our 405 channel carries a small periodic
 ripple shaped like a sawtooth (period about 23.5 s, about 0.4% of the 405
 level) that is not in the 470 channel. Because the motion correction (Step 11)
 subtracts a scaled copy of 405 from 470, the ripple would otherwise appear,
 upside down, in dF/F. Its average shape is measured in sliding 10-minute
-windows (the period is re-estimated in each window) and subtracted. A window
-is changed only where the ripple is at least 4 times stronger than the noise,
-so recordings without it are left unchanged. Turn it off with
-`cfg.remove_sawtooth = false`.
+windows (the period is re-estimated in each window) and subtracted. The shape
+of a window is used only where the ripple is at least 4 times stronger than
+the noise, so a recording without the ripple is normally left unchanged. This
+is a threshold on a noisy measure: a false detection is unlikely, not
+impossible. Where a window that passes overlaps one that does not, a fading
+part of the shape is subtracted. Figure 2, the Command Window and
+`<recording>_sawtooth_windows.csv` show what was subtracted and where. The
+step looks at 405 only and assumes the ripple is not in 470. If your system
+has no such ripple, turn the step off with `cfg.remove_sawtooth = false`.
 
 **7. Low-pass filter.** Removes fast noise (e.g. the heartbeat, ~11 Hz).
 Default: a 2nd-order Butterworth filter, 3 Hz, applied forwards and backwards
 (`filtfilt`), so the signal is not shifted in time (half of the power is kept
-at about 2.4 Hz). Option: a 1-s centred rolling mean instead. Simpson et al.
-(2024) recommend such zero-phase filtering and note that cut-offs of 2-10 Hz
-are typical for indicators such as GCaMP6f.
+at about 2.4 Hz). Each phase is filtered on its own, and so is each stretch
+between two short pauses or missing samples, so the end of one phase cannot
+leak into the start of the next. Option: a centred rolling mean instead (the
+1-s window is rounded to an odd number of samples, 51 at 50 per second).
+Simpson et al. (2024) recommend such zero-phase filtering and note that
+cut-offs of 2-10 Hz are typical for indicators such as GCaMP6f.
 
 **8. Photobleaching correction.** In every phase, a double exponential
 `a·exp(b·t) + c·exp(d·t)` is fitted to each channel, and the channel is divided
@@ -295,7 +340,10 @@ Simpson et al. (2024) describe a double exponential as a good compromise
 signal) and recommend correcting bleaching before, and separately from, the
 motion correction, as done here. Dividing (rather than subtracting) assumes
 that the bleaching comes mainly from the indicator rather than from
-autofluorescence.
+autofluorescence. Because every phase is brought to about 1 on its own, this
+step also removes any difference in signal level between phases and reduces
+very slow changes within a phase: see
+[What the results can and cannot show](#what-the-results-can-and-cannot-show).
 
 **9. Automatic artifact suggestions.** After a preliminary motion correction,
 unusually large and short deflections (at most 40 s) are marked. These are
@@ -305,7 +353,8 @@ suggestions only.
 
 **11. Motion correction and dF/F.** Movement and other non-neural effects
 change both channels; 405 does not depend on calcium. One straight line
-`fitted 405 = slope × 405 + intercept` is fitted to all valid samples by
+`fitted 405 = slope × 405 + intercept` is fitted to all valid samples of the
+recording (one line for all phases together) by
 **IRLS** (iteratively reweighted least squares with Tukey's bisquare weights,
 MATLAB's `robustfit(405, 470, 'bisquare', 1.4)`). Samples far from the line,
 such as calcium transients, get weight 0, so they do not pull the fit (an
@@ -332,7 +381,8 @@ version.
 
 ## Output
 
-Each run creates a new folder (nothing is ever overwritten):
+Each run creates a new folder, and a folder that already holds results is
+never written to again:
 
 ```text
 calcium_preprocessing_results/<recording>_<yyyyMMdd_HHmmss>/
@@ -344,6 +394,11 @@ calcium_preprocessing_results/<recording>_<yyyyMMdd_HHmmss>/
 ├── <recording>_trace.csv                   every sample (only if cfg.save_trace_csv = true)
 └── figures/                                PNG figures (only if cfg.save_figures = true)
 ```
+
+If you save again in the same MATLAB session (for example after running some
+sections again), the new results go to a second folder with the same name
+ending in `_2` (then `_3`, and so on), together with the figures of the
+sections you ran again. The earlier folder is left as it is.
 
 ### The `results` variable
 
@@ -364,12 +419,17 @@ All per-sample fields are column vectors with one value per 405 pulse
 | `results.phase_windows` | first and last sample number of each phase |
 | `results.valid_mask` | `true` where dF/F has a value |
 | `results.trim_mask`, `.manual_mask`, `.artifact_suggestion_mask` | which samples were trimmed, removed by hand, suggested as artifacts |
-| `results.phase_summary` | the per-phase table (also saved as CSV) |
+| `results.phase_summary` | the per-phase table (also saved as CSV). Its column `mean_dF_F_pct` is almost the same in every phase by construction and must not be used to compare phases (see [What the results can and cannot show](#what-the-results-can-and-cannot-show)) |
 | `results.motion_fit` | slope, intercept and tuning constant of the IRLS fit |
 | `results.bleaching` | per phase: the method used and the coefficients a-d |
+| `results.pulse_info` | Step 4: off and on levels and threshold of each LED monitor, pulse counts, measured pulse rates |
+| `results.alignment` | Step 5: how many samples have no 470 value (in total, outside the trims, and while the 405 LED kept flashing), how many were bridged over one missing 470 pulse, and the short pauses of the LEDs inside phases |
 | `results.sawtooth`, `results.lowpass` | details of Steps 6 and 7 |
 | `results.crop_info` | recording start, lights ON, start of the analysis window (`reference_clock`), seconds skipped (`offset_sec`), and where the window starts relative to lights ON (`start_hours_from_lights_on`, -1 = 1 hour before) |
-| `results.settings` | every setting used |
+| `results.settings` | every setting, with the values that were really used (if you changed a setting after its step had run, the value that was used is saved and a warning tells you) |
+| `results.pipeline_version` | version of the code that made the file (see [CHANGELOG.md](CHANGELOG.md)) |
+| `results.format_version` | version of this list of fields (2 since version 1.1.0; files of version 1.0.0 have no such field) |
+| `results.code_checksum` | fingerprint of the functions that made the file. Type `photometry_version()` to see the fingerprint of your copy of the code; if the two are equal, exactly the same functions made the file |
 
 ### Loading the results in MATLAB
 
@@ -424,27 +484,62 @@ Use this to find the EEG epoch each sample belongs to.
 
 Both are saved; choose by your question.
 
-- **Without the rolling median** (`results.no_rolling_median`) keeps every
-  change in the signal, including slow changes over minutes to hours (e.g.
-  between sleep and wake bouts, or across the light-dark cycle). Use it when
-  slow or sustained changes in calcium are part of your question.
-- **With the 1-minute rolling median** (`results.rolling_median`) removes
-  changes slower than about a minute (slow drift, slow changes in the signal
-  level) and keeps fast transients at full height. Use it when you are
-  interested in fast events (transients, their size and rate) and want a flat
-  baseline. Remember that it also removes genuine slow changes.
+- **Without the rolling median** (`results.no_rolling_median`) keeps the
+  changes inside a phase that last from a fraction of a second up to several
+  minutes (for example transients, and differences between sleep and wake
+  bouts). Use it when changes over minutes are part of your question.
+- **With the 1-minute rolling median** (`results.rolling_median`) also removes
+  changes slower than about a minute and keeps fast transients at full
+  height. Use it when you are interested in fast events (transients, their
+  size and rate) and want a flat baseline. Remember that it also removes
+  genuine changes that last longer than about a minute.
+
+Neither version keeps the level of the signal from one phase to the next.
+Read the next section before you compare phases.
+
+### What the results can and cannot show
+
+The photobleaching correction (Step 8) divides each channel by a curve fitted
+to **each phase separately**. Afterwards both channels are close to 1 in every
+phase. This is what removes the bleaching, but it has two more consequences,
+in **both** versions of the results:
+
+- **The signal level cannot be compared between phases.** Any difference in
+  the level of the calcium signal between two phases (for example light and
+  dark blocks, or a baseline day and a recovery day) is removed together with
+  the bleaching. dF/F then has nearly the same mean in every phase. This is
+  produced by the method; it is **not** a biological result. The column
+  `mean_dF_F_pct` of the phase summary shows it: that column is a check of
+  the processing, not a measure of activity.
+- **Very slow changes inside a phase are reduced.** A smooth rise or fall that
+  lasts about as long as the phase itself (tens of minutes to hours) looks
+  like bleaching to the fitted curve and is partly removed with it.
+
+What is kept: changes over seconds to a few minutes inside a phase, that is
+transients (their timing, size and rate) and differences between sleep or
+behavioural states that alternate within a phase.
+
+If you want to compare phases, compare such measures (for example the rate or
+size of transients, or the difference between two sleep stages), not the mean
+dF/F. Even then, keep in mind that dF/F is relative to all the light the
+detector receives in that phase, including background fluorescence, whose
+share can change over a long recording.
 
 ### A note on z-scores
 
 The z-scores are calculated per recording (one mean and SD, or one median and
-MAD, for the whole recording). This puts recordings from different animals on
-the same scale, so differences in indicator expression, light power or
-background fluorescence no longer matter. The price is that real differences
-in overall signal size between animals or recordings are removed too (Simpson
-et al., 2024; GuPPy documentation). Z-scores are therefore good for comparing
-the shape and relative size of changes within an animal (e.g. sleep stages,
-light vs dark, before vs after sleep deprivation), but on their own they
-cannot show that one animal or group has a larger signal than another.
+MAD, for all valid samples of the whole recording). This puts recordings from
+different animals on the same scale, so differences in indicator expression,
+light power or background fluorescence no longer matter. The price is that
+real differences in overall signal size between animals or recordings are
+removed too (Simpson et al., 2024; GuPPy documentation). Z-scores are
+therefore good for comparing the shape and relative size of changes within an
+animal (for example between sleep stages), but on their own they cannot show
+that one animal or group has a larger signal than another. They also do not
+bring back differences in level between phases (see above). And because the
+mean and SD come from the whole recording, a treatment that changes the
+variability of the signal in one part of the recording (for example sleep
+deprivation) also changes the z-values of the other parts.
 
 ## Using your own recording system
 
@@ -455,7 +550,8 @@ cannot show that one animal or group has a larger signal than another.
 | Shorter recording | `cfg.duration_hours` (or `Inf` for "to the end") |
 | Analysis should start at lights ON, not 1 h before | `cfg.hours_before_lights_on = 0` |
 | No start time in the MAT file and no EDF | type it when the dialog asks, or set `cfg.recording_start` |
-| No sawtooth in your 405 channel | nothing (windows without it are left unchanged), or `cfg.remove_sawtooth = false` |
+| No sawtooth in your 405 channel | `cfg.remove_sawtooth = false` (if you leave it on, windows without a clear sawtooth are normally left unchanged; check Figure 2) |
+| An LED is on only briefly (less than 5% of the analysis window) | nothing: the pulse threshold adapts (Step 4) |
 | Rolling mean instead of the Butterworth | `cfg.lowpass_method = 'rolling_mean'` |
 
 If your system already gives one value per LED pulse (no LED monitor
@@ -469,17 +565,35 @@ that `photometry_extract_pulses.m` creates (listed at the top of that file).
 | `These MATLAB functions were not found` | install the toolboxes named in the message (Home > Add-Ons) |
 | `The MAT file has no variable called "Raw"` | set the variable names in Section 1 |
 | `Only X hours of recording remain after the start of the analysis window` | set `cfg.duration_hours` to X or less, or to `Inf` |
-| `The measured pulse rate ... differs from cfg.sample_rate_hz` | check `cfg.sample_rate_hz` and the LED variable names |
+| `The measured pulse rate ... differs from cfg.sample_rate_hz` | check `cfg.sample_rate_hz`, `cfg.raw_sampling_rate_hz` and the LED variable names |
+| `The 405 LED monitor ("...") does not show two clearly different levels` (or 470) | that variable is not the monitor of this LED, or the LED was never on in the analysis window: check `cfg.led405_variable`, `cfg.led470_variable` and the lights-ON time |
+| Warning `... samples outside the trimmed phase edges have a 405 pulse but no 470 pulse next to it` | the 470 LED was off there while the 405 LED kept flashing (it started late, stopped early or dropped out). These samples get no dF/F. Compare the two channels in Figure 1 |
+| `Note: the LED pulses pause ... time(s) inside a phase` | for information: both LEDs were off for a moment inside a phase. Nothing needs to be done; the sample right after such a pause gets no dF/F |
+| `... in the MAT file is not as long as the EDF recording`, or `The MAT recording is ... hours long, but the EDF recording is ...` | the EDF file does not belong to this MAT file, or the MAT file is not a complete copy of it. Use the pair that belongs together. If you are sure of the clock time of the first MAT sample, you can type it in `cfg.recording_start` instead |
+| The preview shows `WARNING: NOT CHECKED against the MAT file` | the EDF file could not be compared with the MAT file. Make sure it is the EDF of this recording before you click Continue |
+| `Nothing was saved, because Step(s) ... are out of date` | you ran an earlier section again. Run the steps named in the message again, in order, then Steps 12 to 14 |
+| Warning `These settings were changed after the step that uses them had run` | for information: the saved settings list the values that were really used. To apply a new value, run its step and every later step again |
 | `Results folder path too long` | set `cfg.output_root` to a short folder such as `'C:\results'` (Windows allows at most 260 characters per path) |
 | Warning `the double exponential failed ... A straight line was used` | check that phase in Figure 4; usually a very short or very noisy phase |
-| "Out of memory" | close other programs; the raw 1000-Hz channels of a 49-h recording need several GB |
+| "Out of memory" | close other programs; see [Requirements](#requirements) for how much memory a long recording needs |
 | The review window does not react to dragging | click the **Brush** icon in the figure toolbar again (zooming switches it off) |
 
 ## Tests
 
-The `tests` folder checks every step on a small synthetic recording (with a
-known sawtooth, movement artifacts and calcium transients). You do not need it
-to analyse data. To run it, open the repository folder in MATLAB and type:
+The `tests` folder holds automatic checks. They run Steps 3 to 14 without
+dialogs on a small synthetic recording (with a known sawtooth, movement
+artifacts and calcium transients), and they test single functions on small
+made-up inputs: clock times and Zeitgeber time, the figure axis, EDF headers,
+LED monitors (ordinary, noisy, rarely on, faulty), missing 470 pulses, short
+LED pauses, the filter at phase edges, and saving twice.
+
+They do **not** cover: the dialogs of Step 2 and the interactive review of
+Step 10 (these need a person at the screen), MAT files that are not `-v7.3`,
+the fallbacks of the bleaching correction (straight line, excluded phase),
+real recordings, and the time and memory a long recording needs.
+
+You do not need the tests to analyse data. To run them, open the repository
+folder in MATLAB and type:
 
 ```matlab
 results = runtests('tests');
@@ -488,25 +602,42 @@ table(results)
 
 ## Methods text for a paper
 
-You can adapt this paragraph (check the settings you used):
+You can adapt this paragraph. The parts in [square brackets] depend on your
+run; the table below says where to find them. Check the settings you used.
 
 > Fibre-photometry signals were preprocessed in MATLAB with a custom pipeline
-> (Photometry Calcium Preprocessing, v1.0.0). The photodetector signal was
+> (Photometry Calcium Preprocessing, v1.1.0). The photodetector signal was
 > sampled at 1 kHz while 405-nm and 470-nm LEDs were alternately pulsed (10-ms
 > pulses, 50 Hz per channel); the median photodetector value during each pulse
-> gave one 405 and one 470 sample per pulse. The 470 signal was interpolated
-> (pchip) onto the 405 pulse times, and the first 15 s and last 5 s of each
-> recording phase were discarded. A periodic sawtooth artifact (period ~23.5 s)
-> in the 405 channel was estimated in sliding 10-min windows and subtracted.
-> Both channels were low-pass filtered (2nd-order Butterworth, 3 Hz, zero-phase
-> `filtfilt`), and photobleaching was corrected in each phase by dividing each
-> channel by a fitted double exponential. Movement artifacts were removed by
-> visual inspection. The 405 signal was fitted to the 470 signal with a single
-> linear fit by iteratively reweighted least squares (Tukey bisquare, tuning
+> gave one 405 and one 470 sample per pulse. Recording phases were separated
+> by pauses in illumination longer than 30 min, and the first 15 s and last
+> 5 s of each phase were discarded. The 470 signal was interpolated (pchip)
+> onto the 405 pulse times. A periodic sawtooth artifact (period ~23.5 s) in
+> the 405 channel was estimated in sliding 10-min windows and subtracted in
+> the windows where it was at least 4 times stronger than the noise [N of M
+> windows]. Both channels were low-pass filtered within each phase (2nd-order
+> Butterworth, 3 Hz, zero-phase `filtfilt`), and photobleaching was corrected
+> in each phase separately by dividing each channel by a fitted double
+> exponential [a straight line was used in phase X; phase Y was excluded
+> because its signal was lost]. [Movement artifacts were identified by visual
+> inspection and excluded (N stretches, T seconds in total).] The 405 signal
+> was fitted to the 470 signal with a single linear fit over the whole
+> recording by iteratively reweighted least squares (Tukey bisquare, tuning
 > constant 1.4), and dF/F was calculated as (470 − fitted 405) / fitted 405.
 > dF/F was z-scored using the mean and SD, and robustly using the median and
-> 1.4826 × MAD, of all valid samples. A second version subtracted a centred
-> 1-min rolling median from dF/F before z-scoring.
+> 1.4826 × MAD, of all valid samples of the recording. A second version
+> subtracted a centred 1-min rolling median from dF/F before z-scoring.
+> Because photobleaching was corrected in each phase separately, signal
+> levels were not compared between phases.
+
+| For the paragraph | Where to find it in the saved `results` |
+|---|---|
+| version of the code | `results.pipeline_version` |
+| settings that were used | `results.settings` |
+| windows in which the sawtooth was subtracted | `results.sawtooth.windows` (column `applied`), also saved as `<recording>_sawtooth_windows.csv` |
+| bleaching method of each phase | `results.bleaching.method` |
+| stretches removed by hand | `results.manual_windows` (empty if you skipped the review; then leave that sentence out) |
+| samples without a 470 value | `results.alignment` |
 
 ## How to cite
 
@@ -514,7 +645,7 @@ If you use this code, please cite it (see `CITATION.cff`; GitHub's **Cite this
 repository** button gives the formatted reference):
 
 > Yazdanpanah Faragheh, F. (2026). *Photometry Calcium Preprocessing: a MATLAB
-> pipeline for long fibre-photometry recordings* (Version 1.0.0) [Computer
+> pipeline for long fibre-photometry recordings* (Version 1.1.0) [Computer
 > software]. <https://github.com/FarahnazYF/Photometry_Calcium_Preprocessing>
 
 ## License

@@ -17,10 +17,14 @@ function info = photometry_read_edf_start(filename)
 %   edf_header_start_date/_time  the raw header text
 %   edf_first_record_offset_sec  EDF+ offset of the first record (0 for EDF)
 %   edf_format                   'EDF+C', 'EDF+D' or '' (plain EDF)
-%   edf_record_count, edf_record_duration_sec
-%   edf_raw_sampling_hz          sampling rate of a channel labelled 'Raw' ([] if none)
-%   edf_expected_raw_samples     number of samples of that channel
-%   mat_length_verified          false (photometry_find_recording_start checks it)
+%   edf_record_count             number of data records (-1 if the file does not say)
+%   edf_record_duration_sec      length of one data record in seconds
+%   edf_labels                   name of every channel
+%   edf_samples_per_record       samples in one data record, per channel
+%                                (sampling rate = samples / record duration)
+%   mat_length_verified, verification_note   filled in by
+%                                photometry_find_recording_start, which checks
+%                                that the EDF belongs to the MAT file
 
 fid = fopen(filename, 'r', 'ieee-le');
 if fid < 0, error('photometry:EDFHeader', 'Cannot open the EDF file: %s', filename); end
@@ -108,8 +112,8 @@ info.edf_first_record_offset_sec = first_record_offset;
 info.edf_format = reserved;
 info.edf_record_count = record_count;
 info.edf_record_duration_sec = record_duration;
-raw = strcmpi(labels, 'Raw');
-info.edf_raw_sampling_hz = samples(raw)/record_duration;
-info.edf_expected_raw_samples = record_count*samples(raw);
+info.edf_labels = labels(:)';                  % name of every EDF channel
+info.edf_samples_per_record = samples(:)';     % samples in one data record, per channel
 info.mat_length_verified = false;
+info.verification_note = '';
 end

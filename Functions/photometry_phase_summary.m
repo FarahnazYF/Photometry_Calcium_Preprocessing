@@ -12,14 +12,22 @@ function summary = photometry_phase_summary(data)
 %   samples                 samples in the phase
 %   trimmed_samples         set to missing by the edge trims (Step 5)
 %   removed_by_hand         removed in the manual review (Step 10)
-%   other_missing           missing for another reason (e.g. a phase
-%                           excluded from the bleaching correction)
+%   other_missing           missing for another reason (a phase excluded
+%                           from the bleaching correction, no 470 pulse
+%                           next to the sample, a stretch too short to filter)
 %   valid_samples, valid_percent   samples with a dF/F value
 %   bleaching_method        what Step 8 used in this phase
-%   sawtooth_windows_removed / sawtooth_windows   Step 6, windows changed / all windows
+%   sawtooth_windows_removed / sawtooth_windows   Step 6, windows whose
+%                           shape was subtracted / all windows
 %   artifact_suggestions    automatic suggestions in this phase (Step 9)
 %   mean_dF_F_pct, sd_dF_F_pct            dF/F without rolling median (%)
 %   sd_dF_F_rolling_median_pct            dF/F after the rolling median (%)
+%
+% NOTE on mean_dF_F_pct: the bleaching correction (Step 8) brings both
+% channels to about 1 in every phase separately. The mean dF/F is therefore
+% almost the same in every phase BY CONSTRUCTION. It is a check of the
+% processing, not a measure of how active the cells were in that phase, and
+% it must not be used to compare phases.
 
 n = size(data.phase_windows, 1);
 h0 = data.crop_info.start_hours_from_lights_on;   % time zero in hours from the first lights ON

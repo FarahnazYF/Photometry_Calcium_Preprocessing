@@ -21,6 +21,19 @@ function data = photometry_correct_bleaching(data, cfg)
 %     the median of the whole recording has lost its signal (e.g. a
 %     disconnected fibre). It is excluded: all its samples become missing.
 %
+% What this means for slow changes (important when you interpret results)
+%   Every phase gets its own fit, and both channels end up around 1 in
+%   every phase. So:
+%   - A difference in signal LEVEL between two phases is removed. dF/F of
+%     one phase cannot be compared in level with dF/F of another phase.
+%   - A smooth change that lasts as long as a phase (tens of minutes to
+%     hours) is taken for bleaching and is partly removed. The four
+%     coefficients may take either sign, so a slow rise is removed too.
+%   - Changes over seconds to a few minutes are far too fast for the
+%     fitted curve and are kept.
+%   Dividing (not subtracting) assumes that the bleaching comes mainly
+%   from the indicator and not from autofluorescence.
+%
 % Output
 %   data.corrected405, data.corrected470   bleaching-corrected (around 1)
 %   data.bleaching_trend405, ..._trend470  the fitted trends
@@ -97,4 +110,5 @@ data.bleaching_info = table((1:n_phases)', method, ...
     'a470', 'b470', 'c470', 'd470'});
 fprintf('Bleaching corrected: double exponential in %d of %d phases.\n', ...
     nnz(method == "double exponential"), n_phases);
+data = photometry_note_step(data, 8, cfg, {'min_fit_samples', 'low_signal_fraction'});
 end

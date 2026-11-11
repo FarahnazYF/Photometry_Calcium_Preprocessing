@@ -59,4 +59,5 @@ if strlength(note) > 0
         note, step_change);
 end
 fprintf('  dF/F: %.1f%% of samples valid; SD %.2f%%.\n', 100*mean(valid), 100*std(data.dF_F(valid)));
+data = photometry_note_step(data, 11, cfg, {'irls_tuning_constant'});
 end

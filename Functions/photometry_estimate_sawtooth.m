@@ -47,13 +47,25 @@ function [cleaned, sawtooth, info] = photometry_estimate_sawtooth(x, t, phase_wi
 %   6. Strength test: the size of that shape (first `harmonics`
 %      harmonics only, about 0-0.35 Hz) must be at least min_snr times the
 %      "noise", i.e. the same measure at five unrelated periods. Otherwise
-%      the window is left unchanged. (Using only the first harmonics stops
-%      an unrelated rhythm, e.g. at 0.37 Hz, from being mistaken for the
-%      ripple. On noise-only test data no window passed this test.)
+%      the shape of this window is not used. (Using only the first
+%      harmonics stops an unrelated rhythm, e.g. at 0.37 Hz, from being
+%      mistaken for the ripple.) This is a threshold on a noisy measure:
+%      it makes a false detection unlikely, not impossible.
 %   7. The shape (all bins, so the sharp fall is kept) is subtracted.
-%      Overlapping windows are blended with triangular weights, so the
-%      estimate changes smoothly from one window to the next.
+%      Windows overlap by half and are blended with triangular weights, so
+%      the estimate changes smoothly from one window to the next. Where a
+%      window whose shape is used overlaps a window whose shape is not
+%      used, a weighted part of the shape is subtracted, fading to zero.
 % Missing samples never contribute to a shape and stay missing.
+%
+% Limits
+%   - Slow trends are removed with a moving mean (step 2). Where the signal
+%     falls steeply (the first minutes after the LED is switched on), some
+%     trend remains and raises the "noise", so a window there can fail the
+%     strength test and keep its ripple. The table of windows shows this
+%     (applied = false).
+%   - Any stable rhythm with a period inside the search range is treated
+%     as the ripple, whatever its cause.
 
 defaults = struct('period_sec', 23.5, 'search_sec', 1, 'window_sec', 600, ...
     'min_snr', 4, 'bins', 47, 'min_cycles', 5, 'harmonics', 8, 'period_span_sec', 1800);

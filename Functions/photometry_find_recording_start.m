@@ -1,8 +1,8 @@
-function [clock, info] = photometry_find_recording_start(mat_file, edf_file, fs)
+function [clock, info] = photometry_find_recording_start(mat_file, edf_file, fs, channel_names)
 %PHOTOMETRY_FIND_RECORDING_START Clock time of the first raw sample of a recording.
 %
 %   [clock, info] = photometry_find_recording_start(mat_file)
-%   [clock, info] = photometry_find_recording_start(mat_file, edf_file, fs)
+%   [clock, info] = photometry_find_recording_start(mat_file, edf_file, fs, channel_names)
 %
 % Where the time comes from, in this order:
 %   1. A small variable in the MAT file that stores the start time, for
@@ -13,22 +13,38 @@ function [clock, info] = photometry_find_recording_start(mat_file, edf_file, fs)
 %      (e.g. Mouse1.0001.mat -> Mouse1.0001.edf).
 % The time is never guessed from file dates or signal values.
 %
+% Check of an EDF file
+%   The start time of an EDF file is only right for the MAT file if the
+%   MAT file is a complete copy of that EDF recording. This is checked:
+%   - If the EDF has a channel with the name of a MAT channel (for example
+%     "Raw"), the two must have the same sampling rate and the same number
+%     of samples. MATLAB adds _2, _3 to repeated names, so the MAT variable
+%     "Raw_2" is also compared with an EDF channel called "Raw".
+%   - Otherwise the two recordings must be equally long (to within one EDF
+%     data record).
+%   A mismatch is an error. If no check is possible (the EDF does not say
+%   how long the recording is), the time is still returned, but
+%   info.mat_length_verified is false and info.verification_note says why.
+%   The dialog of Step 2 then shows a warning.
+%
 % Inputs
-%   mat_file  full path of the raw MAT recording
-%   edf_file  (optional) full path of its EDF file; '' = look next to the MAT
-%   fs        (optional, default 1000) raw samples per second; used to check
-%             that the EDF really belongs to this MAT file (same length)
+%   mat_file       full path of the raw MAT recording
+%   edf_file       (optional) full path of its EDF file; '' = look next to the MAT
+%   fs             (optional, default 1000) raw samples per second
+%   channel_names  (optional, default {'Raw','Raw_2','Raw_3'}) names of the
+%                  photodetector and LED monitor variables in the MAT file
 %
 % Outputs
 %   clock  'HH:mm:ss' (with decimals if the EDF stores a fraction of a second)
 %   info   where it was found: method, source_file, source_field,
-%          recording_start, mat_length_verified
+%          recording_start, mat_length_verified, verification_note
 %
 % Errors with identifier 'photometry:MissingRecordingStart' when neither
 % source has the time (photometry_select_recording then asks you).
 
 if nargin < 2, edf_file = ''; end
-if nargin < 3, fs = 1000; end
+if nargin < 3 || isempty(fs), fs = 1000; end
+if nargin < 4 || isempty(channel_names), channel_names = {'Raw', 'Raw_2', 'Raw_3'}; end
 
 % ---- 1. Look for a start-time variable inside the MAT file --------------
 variables = whos('-file', mat_file);
@@ -65,6 +81,7 @@ if ~isempty(clocks)
     info.source_field = strjoin(fields, ', ');
     info.recording_start = clock;
     info.mat_length_verified = false;
+    info.verification_note = 'Stored in the MAT file itself.';
     return;
 end
 
@@ -84,32 +101,67 @@ if startsWith(info.edf_format, 'EDF+D')
         ['This EDF file has gaps in its recording ("EDF+D"). Clock times cannot be ' ...
          'recovered from sample numbers across those gaps.']);
 end
-
-% Check that the MAT file is a complete conversion of this EDF: same
-% sampling rate and same number of samples in each raw channel.
-if ~isempty(info.edf_raw_sampling_hz)
-    if any(abs(info.edf_raw_sampling_hz - fs) > 1e-9)
-        error('photometry:EDFRateMismatch', ...
-            'The EDF "Raw" channel is sampled at %g Hz, but cfg.raw_sampling_rate_hz = %g Hz.', ...
-            info.edf_raw_sampling_hz(1), fs);
-    end
-    if info.edf_record_count >= 0
-        for name = {'Raw', 'Raw_2', 'Raw_3'}
-            item = variables(strcmp({variables.name}, name{1}));
-            if isempty(item), continue; end   % other channel names: nothing to compare
-            if ~any(prod(item.size) == info.edf_expected_raw_samples)
-                error('photometry:EDFLengthMismatch', ...
-                    ['%s in the MAT file is not as long as the EDF recording. Use the original, ' ...
-                     'complete MAT conversion and the EDF file that belongs to it.'], name{1});
-            end
-            info.mat_length_verified = true;
-        end
-    end
-end
+[info.mat_length_verified, info.verification_note] = compare_edf_with_mat( ...
+    info, variables, channel_names, fs);
 clock = info.recording_start;
 end
 
 % ==========================================================================
+function [verified, note] = compare_edf_with_mat(info, variables, channel_names, fs)
+% Is the MAT file a complete copy of this EDF recording? Errors if it is
+% clearly not; verified = false (with a note) if this cannot be told.
+verified = false;
+if info.edf_record_count < 0
+    note = 'NOT CHECKED against the MAT file: the EDF file does not say how long the recording is.';
+    return;
+end
+
+% Channels that have the same name in both files.
+checked = {};
+for k = 1:numel(channel_names)
+    item = variables(strcmp({variables.name}, channel_names{k}));
+    if isempty(item), continue; end
+    same_name = unique({channel_names{k}, regexprep(channel_names{k}, '_\d+$', '')});
+    match = ismember(lower(info.edf_labels), lower(same_name));
+    if ~any(match), continue; end
+    rate = info.edf_samples_per_record(match)/info.edf_record_duration_sec;
+    if ~any(abs(rate - fs) <= 1e-9)
+        error('photometry:EDFRateMismatch', ...
+            'The EDF channel "%s" is sampled at %g Hz, but cfg.raw_sampling_rate_hz = %g Hz.', ...
+            channel_names{k}, rate(1), fs);
+    end
+    expected = info.edf_record_count*info.edf_samples_per_record(match);
+    if ~any(prod(item.size) == expected)
+        error('photometry:EDFLengthMismatch', ...
+            ['%s in the MAT file is not as long as the EDF recording. Use the original, ' ...
+             'complete MAT conversion and the EDF file that belongs to it.'], channel_names{k});
+    end
+    checked{end+1} = channel_names{k}; %#ok<AGROW>
+end
+if ~isempty(checked)
+    verified = true;
+    note = sprintf('The MAT file matches the EDF file (%s: same number of samples).', strjoin(checked, ', '));
+    return;
+end
+
+% No channel has the same name in both files: compare the two durations.
+item = variables(strcmp({variables.name}, channel_names{1}));
+if isempty(item)
+    note = sprintf('NOT CHECKED against the MAT file: it has no variable called "%s".', channel_names{1});
+    return;
+end
+duration_mat = prod(item.size)/fs;
+duration_edf = info.edf_record_count*info.edf_record_duration_sec;
+if abs(duration_mat - duration_edf) > info.edf_record_duration_sec
+    error('photometry:EDFLengthMismatch', ...
+        ['The MAT recording is %.3f hours long ("%s" at %g Hz), but the EDF recording is %.3f hours ' ...
+         'long. Use the original, complete MAT conversion and the EDF file that belongs to it.'], ...
+        duration_mat/3600, channel_names{1}, fs, duration_edf/3600);
+end
+verified = true;
+note = 'The MAT file matches the EDF file (the two recordings are equally long; the channel names differ).';
+end
+
 function [clocks, paths] = inspect(value, path, key, depth, known, containers)
 % Search a loaded variable (and structs inside it, up to 3 levels) for a
 % start-time value. Returns every clock found and where it was found.

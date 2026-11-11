@@ -34,6 +34,7 @@ n = numel(data.time_s);
 data.manual_mask = false(n, 1);
 data.manual_windows = table('Size', [0 numel(window_columns)], ...
     'VariableTypes', repmat({'double'}, 1, numel(window_columns)), 'VariableNames', window_columns);
+data = photometry_note_step(data, 10, cfg, {'manual_review'});
 if ~cfg.manual_review
     fprintf('Manual artifact removal skipped.\n');
     return;

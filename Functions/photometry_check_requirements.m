@@ -4,7 +4,7 @@ function photometry_check_requirements()
 %   photometry_check_requirements()
 %
 % The pipeline needs MATLAB R2020a or newer and three toolboxes:
-%   Signal Processing Toolbox                butter, filtfilt, findpeaks, medfilt1
+%   Signal Processing Toolbox                butter, filtfilt, findpeaks, freqz
 %   Statistics and Machine Learning Toolbox  robustfit, mad, prctile
 %   Curve Fitting Toolbox                    fit, fittype (double exponential)
 % Checking at the start avoids a crash halfway through a long recording.
@@ -13,7 +13,6 @@ needed = { ...
     'butter',         'Signal Processing Toolbox'
     'filtfilt',       'Signal Processing Toolbox'
     'findpeaks',      'Signal Processing Toolbox'
-    'medfilt1',       'Signal Processing Toolbox'
     'freqz',          'Signal Processing Toolbox'
     'robustfit',      'Statistics and Machine Learning Toolbox'
     'mad',            'Statistics and Machine Learning Toolbox'
