@@ -643,6 +643,7 @@ run; the table below says where to find them. Check the settings you used.
 ## Contributors
 
 - **Farahnaz Yazdanpanah Faragheh**, University of Surrey: author.
+  [LinkedIn](https://www.linkedin.com/in/farahnaz-yazdanpanah-faragheh-sleep-researcher)
 - **Julie Seibt**, University of Surrey: contributor.
   [j.seibt@surrey.ac.uk](mailto:j.seibt@surrey.ac.uk) ·
   [University profile](https://www.surrey.ac.uk/people/julie-seibt) ·
