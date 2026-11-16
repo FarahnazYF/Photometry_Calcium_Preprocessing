@@ -38,6 +38,7 @@ since 1.0.0. Before you interpret the results, read
 - [Troubleshooting](#troubleshooting)
 - [Tests](#tests)
 - [Methods text for a paper](#methods-text-for-a-paper)
+- [Contributors](#contributors)
 - [How to cite](#how-to-cite)
 - [License](#license)
 - [References](#references)
@@ -639,12 +640,20 @@ run; the table below says where to find them. Check the settings you used.
 | stretches removed by hand | `results.manual_windows` (empty if you skipped the review; then leave that sentence out) |
 | samples without a 470 value | `results.alignment` |
 
+## Contributors
+
+- **Farahnaz Yazdanpanah Faragheh**, University of Surrey: author.
+- **Julie Seibt**, University of Surrey: contributor.
+  [j.seibt@surrey.ac.uk](mailto:j.seibt@surrey.ac.uk) ·
+  [University profile](https://www.surrey.ac.uk/people/julie-seibt) ·
+  [LinkedIn](https://uk.linkedin.com/in/julie-seibt-9b7bb824)
+
 ## How to cite
 
 If you use this code, please cite it (see `CITATION.cff`; GitHub's **Cite this
 repository** button gives the formatted reference):
 
-> Yazdanpanah Faragheh, F. (2026). *Photometry Calcium Preprocessing: a MATLAB
+> Yazdanpanah Faragheh, F., & Seibt, J. (2026). *Photometry Calcium Preprocessing: a MATLAB
 > pipeline for long fibre-photometry recordings* (Version 1.1.0) [Computer
 > software]. <https://github.com/FarahnazYF/Photometry_Calcium_Preprocessing>
 

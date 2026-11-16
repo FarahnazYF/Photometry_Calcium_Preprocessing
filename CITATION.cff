@@ -13,6 +13,11 @@ authors:
   - given-names: Farahnaz
     family-names: Yazdanpanah Faragheh
     affiliation: University of Surrey
+  - given-names: Julie
+    family-names: Seibt
+    affiliation: University of Surrey
+    email: j.seibt@surrey.ac.uk
+    website: "https://www.surrey.ac.uk/people/julie-seibt"
 version: 1.1.0
 date-released: 2026-11-11
 license: MIT
